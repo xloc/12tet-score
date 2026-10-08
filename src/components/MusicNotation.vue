@@ -1,6 +1,15 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, useTemplateRef } from 'vue';
+import {
+  computed,
+  onBeforeUnmount,
+  onMounted,
+  ref,
+  useTemplateRef,
+  watch,
+  type CSSProperties,
+} from 'vue';
 import { useDragSelection, type SelectionDrag } from '../composables/useDragSelection';
+import { placePitchLabels } from '../labels';
 import { notePlacement, pitchLabel, scoreLines, type Note } from '../music';
 import {
   boxHits,
@@ -17,6 +26,7 @@ const props = defineProps<{
   totalTicks: number;
   ppq: number;
   ticksPerBar: number;
+  foldThreshold: number;
   selection: MusicSelection;
 }>();
 const emit = defineEmits<{ select: [selection: MusicSelection] }>();
@@ -26,26 +36,91 @@ const surface = useTemplateRef<HTMLDivElement>('surface');
 const selected = computed(() => new Set(selectedIndices(props.notes, props.selection)));
 
 const beatWidth = 8;
-const barsPerLine = ref(1);
+const availableWidth = ref(0);
+const rem = ref(16);
 const beatsPerBar = computed(() => props.ticksPerBar / props.ppq);
-const lines = computed(() =>
-  scoreLines(props.notes, props.totalTicks, props.ticksPerBar, barsPerLine.value),
+const barsPerLine = computed(() =>
+  Math.max(1, Math.floor(availableWidth.value / (beatsPerBar.value * beatWidth * rem.value))),
 );
+const lines = computed(() =>
+  scoreLines(
+    props.notes,
+    props.totalTicks,
+    props.ticksPerBar,
+    barsPerLine.value,
+    props.foldThreshold,
+  ),
+);
+const labelLayouts = ref<
+  Record<number, Record<number, { label: CSSProperties; connector: CSSProperties }>>
+>({});
 let observer: ResizeObserver | undefined;
 
 onMounted(() => {
   observer = new ResizeObserver(([entry]) => {
-    const rem = Number.parseFloat(getComputedStyle(document.documentElement).fontSize);
-    barsPerLine.value = Math.max(
-      1,
-      Math.floor(entry!.contentRect.width / (beatsPerBar.value * beatWidth * rem)),
-    );
+    rem.value = Number.parseFloat(getComputedStyle(document.documentElement).fontSize);
+    availableWidth.value = entry!.contentRect.width;
     cancel();
   });
   observer.observe(viewport.value!);
 });
 
 onBeforeUnmount(() => observer?.disconnect());
+
+watch([lines, availableWidth, rem], layoutLabels, { flush: 'post' });
+
+function layoutLabels() {
+  const layouts: typeof labelLayouts.value = {};
+  const bounds = surface.value!.getBoundingClientRect();
+  const notes = Array.from(
+    surface.value!.querySelectorAll<HTMLDivElement>('[data-score-line]'),
+  ).flatMap((element, lineIndex) =>
+    Array.from(element.querySelectorAll<HTMLButtonElement>('[data-note-index]')).map((button) => {
+      const bar = button.getBoundingClientRect();
+      const label = button.querySelector<HTMLSpanElement>('[data-pitch-label]')!;
+      return {
+        lineFrom: lines.value[lineIndex]!.from,
+        index: Number(button.dataset.noteIndex),
+        bar: {
+          left: bar.left - bounds.left,
+          top: bar.top - bounds.top,
+          right: bar.right - bounds.left,
+          bottom: bar.bottom - bounds.top,
+        },
+        width: label.offsetWidth,
+        height: label.offsetHeight,
+      };
+    }),
+  );
+  const obstacles = Array.from(
+    surface.value!.querySelectorAll<HTMLElement>('[data-pitch-fold], [data-time-label]'),
+  ).map((element) => {
+    const rect = element.getBoundingClientRect();
+    return {
+      left: rect.left - bounds.left,
+      top: rect.top - bounds.top,
+      right: rect.right - bounds.left,
+      bottom: rect.bottom - bounds.top,
+    };
+  });
+  const positions = placePitchLabels(notes, bounds.width, bounds.height, obstacles);
+  for (const [index, label] of positions.entries()) {
+    const { bar, lineFrom, index: noteIndex } = notes[index]!;
+    const above = label.bottom <= bar.top;
+    const top = above ? label.bottom : bar.bottom;
+    const bottom = above ? bar.top : label.top;
+    layouts[lineFrom] ??= {};
+    layouts[lineFrom]![noteIndex] = {
+      label: { left: `${label.left - bar.left}px`, top: `${label.top - bar.top}px` },
+      connector: {
+        left: `${Math.max(bar.left, Math.min(bar.right, (label.left + label.right) / 2)) - bar.left}px`,
+        top: `${top - bar.top}px`,
+        height: `${Math.max(0, bottom - top)}px`,
+      },
+    };
+  }
+  labelLayouts.value = layouts;
+}
 
 function pointFromEvent(event: PointerEvent): Point {
   const bounds = surface.value!.getBoundingClientRect();
@@ -140,7 +215,7 @@ function clearSelection() {
   <div ref="viewport" class="min-h-0 overflow-auto">
     <div
       ref="surface"
-      class="relative grid w-full touch-pan-y touch-pinch-zoom gap-y-4 select-none"
+      class="relative grid w-full touch-pan-y touch-pinch-zoom gap-y-12 py-4 select-none"
       title="Drag to select notes; Alt/Option-drag to select a time range"
       @pointerdown="start"
       @pointermove="move"
@@ -155,61 +230,90 @@ function clearSelection() {
         v-for="line in lines"
         :key="line.from"
         data-score-line
-        class="relative grid min-w-0 bg-slate-50"
+        class="relative grid min-w-0"
         :style="{
           width: `${((line.to - line.from) / (barsPerLine * ticksPerBar)) * 100}%`,
           gridTemplateColumns: `repeat(${(line.to - line.from) / (ppq / 4)}, minmax(0, 1fr))`,
-          gridTemplateRows: `repeat(${line.highestPitch - line.lowestPitch + 1}, 1rem)`,
+          gridTemplateRows: `repeat(${line.rows.length}, 0.5rem)`,
         }"
         @click.self="clearSelection"
       >
-        <span
-          v-if="range && range.from < line.to && range.to > line.from"
-          class="pointer-events-none border-x border-teal-500 bg-teal-700/5"
-          :style="{
-            gridRow: '1 / -1',
-            gridColumn: `${1 + (Math.max(range.from, line.from) - line.from) / (ppq / 4)} / ${1 + (Math.min(range.to, line.to) - line.from) / (ppq / 4)}`,
-          }"
-        ></span>
-        <span
-          v-for="beat in (line.to - line.from) / ppq"
-          :key="`guide-${beat}`"
-          class="pointer-events-none overflow-hidden"
-          :class="[
-            { 'border-l': beat > 1 },
-            (beat - 1) % beatsPerBar === 0 ? 'border-slate-200' : 'border-slate-100',
-          ]"
-          :style="{ gridRow: '1 / -1', gridColumn: `${1 + (beat - 1) * 4} / span 4` }"
-        >
+        <template v-for="band in line.bands" :key="band.from">
           <span
-            class="block h-4 overflow-hidden px-1 text-[10px] leading-4 tabular-nums"
-            :class="(beat - 1) % beatsPerBar === 0 ? 'text-slate-400' : 'text-slate-300'"
+            class="pointer-events-none bg-slate-200"
+            :style="{ gridRow: `${band.from} / ${band.to}`, gridColumn: '1 / -1' }"
+          ></span>
+          <span
+            v-if="range && range.from < line.to && range.to > line.from"
+            class="pointer-events-none border-x border-teal-500 bg-teal-700/5"
+            :style="{
+              gridRow: `${band.from} / ${band.to}`,
+              gridColumn: `${1 + (Math.max(range.from, line.from) - line.from) / (ppq / 4)} / ${1 + (Math.min(range.to, line.to) - line.from) / (ppq / 4)}`,
+            }"
+          ></span>
+          <span
+            v-for="beat in (line.to - line.from) / ppq"
+            :key="`guide-${beat}`"
+            class="pointer-events-none relative"
+            :class="[
+              { 'border-l': beat > 1 },
+              (beat - 1) % beatsPerBar === 0 ? 'border-white' : 'border-slate-100',
+            ]"
+            :style="{
+              gridRow: `${band.from} / ${band.to}`,
+              gridColumn: `${1 + (beat - 1) * 4} / span 4`,
+            }"
           >
-            <template v-if="(beat - 1) % beatsPerBar === 0">
-              Measure {{ 1 + line.from / ticksPerBar + Math.floor((beat - 1) / beatsPerBar) }}
-            </template>
-            <template v-else>{{ ((beat - 1) % beatsPerBar) + 1 }}</template>
+            <span
+              v-if="band.from === 1"
+              data-time-label
+              class="absolute bottom-full left-0 h-4 px-1 text-[10px] leading-4 tabular-nums"
+              :class="(beat - 1) % beatsPerBar === 0 ? 'text-slate-400' : 'text-slate-300'"
+            >
+              <template v-if="(beat - 1) % beatsPerBar === 0">
+                {{ 1 + line.from / ticksPerBar + Math.floor((beat - 1) / beatsPerBar) }}
+              </template>
+              <template v-else>{{ ((beat - 1) % beatsPerBar) + 1 }}</template>
+            </span>
           </span>
-        </span>
-        <span
-          v-for="row in line.highestPitch - line.lowestPitch + 1"
-          :key="`row-${row}`"
-          class="pointer-events-none border-b border-slate-100"
-          :style="{ gridRow: row, gridColumn: '1 / -1' }"
-        ></span>
+        </template>
+        <template v-for="(row, index) in line.rows" :key="`pitch-row-${index}`">
+          <span
+            v-if="typeof row === 'number' && row % 12 === 0"
+            class="pointer-events-none h-px self-center bg-slate-100"
+            :style="{ gridRow: index + 1, gridColumn: '1 / -1' }"
+          ></span>
+          <span
+            v-else-if="typeof row !== 'number'"
+            data-pitch-fold
+            class="pointer-events-none"
+            :style="{ gridRow: index + 1, gridColumn: '1 / -1' }"
+          ></span>
+        </template>
         <button
           v-for="{ note, index } in line.notes"
           :key="index"
-          class="relative z-10 h-4 min-w-0 cursor-pointer self-center overflow-hidden rounded-sm px-0.5 text-left text-xs font-medium text-white enabled:hover:brightness-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700"
-          :class="selected.has(index) ? 'bg-teal-700' : 'bg-slate-700'"
+          class="relative z-10 h-1 min-w-0 cursor-pointer self-center rounded-sm text-left font-medium enabled:hover:brightness-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700"
+          :class="selected.has(index) ? 'bg-teal-700 text-teal-700' : 'bg-slate-700 text-slate-700'"
           :data-note-index="index"
-          :style="notePlacement(note, line.from, line.to, line.highestPitch, ppq)"
+          :style="notePlacement(note, line.from, line.to, line.rows, ppq)"
           :title="`${pitchLabel(note.pitch)} · ${note.len / ppq} beats`"
           @click="selectNote(index, $event)"
         >
-          <span v-if="note.at < line.from">←</span>
-          {{ pitchLabel(note.pitch) }}
-          <span v-if="note.at + note.len > line.to">→</span>
+          <span
+            v-if="labelLayouts[line.from]?.[index]"
+            class="pointer-events-none absolute w-px bg-current opacity-40"
+            :style="labelLayouts[line.from]![index]!.connector"
+          ></span>
+          <span
+            data-pitch-label
+            class="absolute -top-4 left-0 px-0.5 text-xs leading-4 whitespace-nowrap"
+            :style="labelLayouts[line.from]?.[index]?.label"
+          >
+            <span v-if="note.at < line.from">←</span>
+            {{ pitchLabel(note.pitch) }}
+            <span v-if="note.at + note.len > line.to">→</span>
+          </span>
         </button>
       </div>
       <div

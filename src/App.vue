@@ -22,6 +22,7 @@ onBeforeUnmount(playback.stop);
       :total-ticks="totalTicks"
       :ppq="score.ppq"
       :ticks-per-bar="ticksPerBar"
+      :fold-threshold="sheet.foldThreshold"
       :selection="sheet.selection"
       @select="sheet.selection = $event"
     />

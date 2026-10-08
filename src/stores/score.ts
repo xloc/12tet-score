@@ -4,12 +4,13 @@ import { score } from '../music.ts';
 import { selectedIndices, selectionSpan, type MusicSelection } from '../selection.ts';
 
 export const useScoreStore = defineStore('score', () => {
+  const foldThreshold = ref(12);
   const selection = ref<MusicSelection>({ kind: 'notes', indices: [] });
   const selectedNotes = computed(() =>
     selectedIndices(score.notes, selection.value).map((index) => score.notes[index]!),
   );
   const span = computed(() => selectionSpan(score.notes, selection.value));
-  return { selection, selectedNotes, span };
+  return { foldThreshold, selection, selectedNotes, span };
 });
 
 if (import.meta.hot) {

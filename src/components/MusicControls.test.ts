@@ -84,3 +84,17 @@ test('switching contexts preserves the same panel elements and layout classes', 
   );
   for (const shape of shapes) expect(shape).toEqual(shapes[0]);
 });
+
+test('settings show the shared pitch-fold threshold', async () => {
+  const pinia = createPinia();
+  const sheet = useScoreStore(pinia);
+  expect(sheet.foldThreshold).toBe(12);
+  for (let threshold = 0; threshold <= 15; threshold++) {
+    sheet.foldThreshold = threshold;
+    const html = await renderToString(createSSRApp(MusicControls).use(pinia));
+    const input = html.match(/<input\b[^>]*id="fold-threshold"[^>]*>/)![0];
+    const output = html.match(/<output\b[^>]*for="fold-threshold"[^>]*>([^<]*)<\/output>/)![1];
+    expect(input).toContain(`value="${threshold}"`);
+    expect(output!.trim()).toBe(threshold === 0 ? '0 (off)' : `${threshold} unused pitches`);
+  }
+});

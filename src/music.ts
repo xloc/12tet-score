@@ -35,11 +35,32 @@ export function seconds(ticks: number, bpm: number) {
   return ((ticks / score.ppq) * 60) / bpm;
 }
 
+export type PitchRow = number | { from: number; to: number };
+
+export function pitchRows(pitches: number[], foldThreshold: number): PitchRow[] {
+  const used = [...new Set(pitches)].sort((a, b) => b - a);
+  const rows: PitchRow[] = [];
+  for (const pitch of used) {
+    const previous = rows.at(-1);
+    if (typeof previous === 'number') {
+      const gap = previous - pitch - 1;
+      if (foldThreshold > 0 && gap >= foldThreshold) {
+        rows.push({ from: pitch + 1, to: previous - 1 });
+      } else {
+        for (let missing = previous - 1; missing > pitch; missing--) rows.push(missing);
+      }
+    }
+    rows.push(pitch);
+  }
+  return rows;
+}
+
 export function scoreLines(
   notes: Note[],
   totalTicks: number,
   ticksPerBar: number,
   barsPerLine: number,
+  foldThreshold: number,
 ) {
   const indexedNotes = notes.map((note, index) => ({ note, index }));
   const ticksPerLine = ticksPerBar * barsPerLine;
@@ -48,28 +69,29 @@ export function scoreLines(
     const to = Math.min(from + ticksPerLine, totalTicks);
     const lineNotes = indexedNotes.filter(({ note }) => note.at < to && note.at + note.len > from);
     const pitches = lineNotes.length ? lineNotes.map(({ note }) => note.pitch) : [60];
+    const rows = pitchRows(pitches, foldThreshold);
+    const bands = [{ from: 1, to: rows.length + 1 }];
+    for (const [index, row] of rows.entries()) {
+      if (typeof row === 'number') continue;
+      bands.at(-1)!.to = index + 1;
+      bands.push({ from: index + 2, to: rows.length + 1 });
+    }
     return {
       from,
       to,
       notes: lineNotes,
-      highestPitch: Math.max(...pitches),
-      lowestPitch: Math.min(...pitches),
+      rows,
+      bands,
     };
   });
 }
 
-export function notePlacement(
-  note: Note,
-  from: number,
-  to: number,
-  highestPitch: number,
-  ppq: number,
-) {
+export function notePlacement(note: Note, from: number, to: number, rows: PitchRow[], ppq: number) {
   const cell = ppq / 4;
   const start = Math.max(note.at, from);
   const end = Math.min(note.at + note.len, to);
   return {
-    gridRow: highestPitch - note.pitch + 1,
+    gridRow: rows.indexOf(note.pitch) + 1,
     gridColumn: `${1 + (start - from) / cell} / span ${(end - start) / cell}`,
   };
 }

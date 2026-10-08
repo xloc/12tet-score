@@ -10,7 +10,7 @@ import InfoPanel from './InfoPanel.vue';
 
 const sheet = useScoreStore();
 const playback = usePlaybackStore();
-const playbackSettings = useTemplateRef<HTMLDialogElement>('playbackSettings');
+const settings = useTemplateRef<HTMLDialogElement>('settings');
 const infoSummary = computed(() => {
   if (sheet.selectedNotes.length === 1) return pitchLabel(sheet.selectedNotes[0]!.pitch);
   if (sheet.selectedNotes.length || sheet.selection.kind === 'range')
@@ -69,7 +69,7 @@ const infoFields = computed(() => {
           icon-only
           title="Settings"
           :disabled="playback.playing"
-          @click="playbackSettings?.showModal()"
+          @click="settings?.showModal()"
         >
           <Settings :size="16" />
           <span class="sr-only">Settings</span>
@@ -118,12 +118,12 @@ const infoFields = computed(() => {
   </aside>
 
   <dialog
-    ref="playbackSettings"
+    ref="settings"
     closedby="any"
     class="m-auto max-h-[calc(100dvh-2rem)] w-96 max-w-[calc(100vw-2rem)] overflow-auto rounded border border-slate-300 bg-white p-4 text-sm text-slate-900 backdrop:bg-slate-900/20"
   >
     <div class="space-y-3">
-      <h2 class="font-medium">Playback settings</h2>
+      <h2 class="font-medium">Settings</h2>
       <fieldset :disabled="playback.playing" class="space-y-2">
         <div class="flex items-baseline justify-between gap-3">
           <label for="tempo" class="text-xs text-slate-500">Tempo</label>
@@ -140,6 +140,26 @@ const infoFields = computed(() => {
           max="160"
           autofocus
         />
+      </fieldset>
+      <fieldset class="space-y-2">
+        <div class="flex items-baseline justify-between gap-3">
+          <label for="fold-threshold" class="text-xs text-slate-500">Fold pitch gaps</label>
+          <output for="fold-threshold" class="font-medium text-slate-900 tabular-nums">
+            {{ sheet.foldThreshold === 0 ? '0 (off)' : `${sheet.foldThreshold} unused pitches` }}
+          </output>
+        </div>
+        <input
+          id="fold-threshold"
+          v-model.number="sheet.foldThreshold"
+          class="block w-full accent-teal-700"
+          type="range"
+          min="0"
+          max="15"
+          step="1"
+        />
+        <p class="text-xs text-slate-500">
+          Fold gaps with at least this many unused pitches in a line. Set to 0 to disable.
+        </p>
       </fieldset>
     </div>
   </dialog>

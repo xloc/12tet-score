@@ -15,10 +15,15 @@ test('wrapped notation shows both segments of a held note with the same selectio
       totalTicks: 3840,
       ppq: 480,
       ticksPerBar: 1920,
+      foldThreshold: 0,
       selection: { kind: 'notes', indices: [0] },
     }),
   );
   expect(html.match(/data-score-line/g)).toHaveLength(2);
+  const numbers = [...html.matchAll(/<span\b[^>]*data-time-label[^>]*>([\s\S]*?)<\/span>/g)].map(
+    (match) => match[1]!.replace(/<!--[\s\S]*?-->/g, '').trim(),
+  );
+  expect(numbers).toEqual(['1', '2', '3', '4', '2', '2', '3', '4']);
   const segments = [
     ...html.matchAll(/<button\b[^>]*data-note-index="0"[^>]*>[\s\S]*?<\/button>/g),
   ].map((match) => match[0]);
@@ -45,6 +50,7 @@ test('a time range crossing a line break highlights each line within its own bou
       totalTicks: 3840,
       ppq: 480,
       ticksPerBar: 1920,
+      foldThreshold: 0,
       selection: { kind: 'range', from: 1440, to: 2400 },
     }),
   );
@@ -52,4 +58,50 @@ test('a time range crossing a line break highlights each line within its own bou
   expect(highlights).toHaveLength(2);
   expect(highlights[0]).toContain('grid-column:13 / 17');
   expect(highlights[1]).toContain('grid-column:1 / 5');
+});
+
+test('folded notation leaves blank pitch gaps and retains note timing, labels, and selection', async () => {
+  for (const foldThreshold of [0, 12]) {
+    const html = await renderToString(
+      createSSRApp(MusicNotation, {
+        notes: [
+          { pitch: 48, at: 0, len: 1920, voice: 3 },
+          { pitch: 72, at: 480, len: 480, voice: 1 },
+        ],
+        totalTicks: 1920,
+        ppq: 480,
+        ticksPerBar: 1920,
+        foldThreshold,
+        selection: { kind: 'notes', indices: [0] },
+      }),
+    );
+    const notes = [
+      ...html.matchAll(/<button\b[^>]*data-note-index="\d"[^>]*>[\s\S]*?<\/button>/g),
+    ].map((match) => match[0]);
+    expect(notes).toHaveLength(2);
+    expect(notes[0]).toContain('C3');
+    expect(notes[0]).toContain('bg-teal-700');
+    expect(notes[0]).toContain('grid-column:1 / span 16');
+    expect(notes[0]).toContain(`grid-row:${foldThreshold ? 3 : 25};`);
+    expect(notes[1]).toContain('C5');
+    expect(notes[1]).toContain('grid-column:5 / span 4');
+    expect(notes[1]).toContain('grid-row:1;');
+    const guides = html.match(/<span\b[^>]*h-px self-center[^>]*>/g)!;
+    expect(guides).toHaveLength(foldThreshold ? 2 : 3);
+    if (foldThreshold) {
+      const fold = html.match(/<span\b[^>]*data-pitch-fold[^>]*><\/span>/)![0];
+      expect(fold).not.toContain('bg-');
+      expect(fold).not.toContain('title=');
+      expect(html).not.toContain('unused pitches');
+      const backgrounds = html.match(
+        /<span\b[^>]*class="pointer-events-none bg-slate-200"[^>]*>/g,
+      )!;
+      expect(backgrounds).toHaveLength(2);
+      expect(backgrounds[0]).toContain('grid-row:1 / 2');
+      expect(backgrounds[1]).toContain('grid-row:3 / 4');
+      expect(html).toContain('grid-template-rows:repeat(3, 0.5rem)');
+    } else {
+      expect(html).not.toContain('data-pitch-fold');
+    }
+  }
 });
