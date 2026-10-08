@@ -8,6 +8,7 @@ import { usePlaybackStore } from '../stores/playback';
 import { useScoreStore } from '../stores/score';
 import ControlButton from './ControlButton.vue';
 import InfoPanel from './InfoPanel.vue';
+import MidiPanel from './MidiPanel.vue';
 
 const emit = defineEmits<{ scrollToPlayhead: [] }>();
 const sheet = useScoreStore();
@@ -72,10 +73,10 @@ const infoFields = computed(() => {
 
 <template>
   <aside
-    v-if="score"
-    class="grid max-h-[35dvh] overflow-auto border-t border-slate-200 bg-slate-50 sm:grid-cols-2"
+    class="grid max-h-[35dvh] overflow-auto border-t border-slate-200 bg-slate-50"
+    :class="score ? 'sm:grid-cols-2 lg:grid-cols-3' : ''"
   >
-    <InfoPanel class="border-b sm:border-r sm:border-b-0">
+    <InfoPanel v-if="score" class="border-b sm:border-r lg:border-b-0">
       <div class="flex items-center gap-2">
         <ControlButton primary icon-only :title="playLabel" @click="togglePlayback">
           <Pause v-if="playback.playing" :size="16" />
@@ -115,7 +116,7 @@ const infoFields = computed(() => {
       </div>
     </InfoPanel>
 
-    <InfoPanel>
+    <InfoPanel v-if="score" class="border-b lg:border-r lg:border-b-0">
       <dl class="grid grid-cols-[minmax(6rem,1fr)_minmax(5rem,1fr)_minmax(0,1.5fr)] gap-x-3">
         <div v-for="field in infoFields" :key="field.label" class="min-w-0">
           <dt class="h-4 truncate text-xs text-slate-500" :title="field.label">
@@ -140,9 +141,11 @@ const infoFields = computed(() => {
         </ControlButton>
       </div>
     </InfoPanel>
+    <MidiPanel :class="score ? 'sm:col-span-2 lg:col-span-1' : ''" />
   </aside>
 
   <dialog
+    v-if="score"
     ref="settings"
     closedby="any"
     class="m-auto max-h-[calc(100dvh-2rem)] w-96 max-w-[calc(100vw-2rem)] overflow-auto rounded border border-slate-300 bg-white p-4 text-sm text-slate-900 backdrop:bg-slate-900/20"

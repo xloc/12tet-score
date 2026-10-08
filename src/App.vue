@@ -39,7 +39,7 @@ onBeforeUnmount(playback.stop);
       <p v-else-if="sheet.error">{{ sheet.error }}</p>
       <p v-else>No score loaded.</p>
     </div>
-    <MusicControls v-if="sheet.score" @scroll-to-playhead="notation?.scrollToPlayhead()" />
+    <MusicControls @scroll-to-playhead="notation?.scrollToPlayhead()" />
     <MusicStatusBar />
   </main>
 </template>

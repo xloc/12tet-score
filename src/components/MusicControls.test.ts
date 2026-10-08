@@ -165,6 +165,7 @@ test('the app keeps the load dialog available while the initial public score is 
     const loading = sheet.loadHosted('missing.json');
     const pending = await renderToString(createSSRApp(App).use(pinia));
     expect(pending).toContain('Loading score…');
+    expect(pending).toContain('MIDI device');
     expect(pending).not.toContain('data-note-index');
     expect(pending.match(/<dialog\b/g)).toHaveLength(1);
     expect(pending).toContain('accept=".json,application/json"');
@@ -173,6 +174,7 @@ test('the app keeps the load dialog available while the initial public score is 
     const failed = await renderToString(createSSRApp(App).use(pinia));
     expect(failed).toContain('Could not load score (404).');
     expect(failed).toContain('Load score');
+    expect(failed).toContain('MIDI device');
     expect(failed).not.toContain('data-note-index');
   } finally {
     vi.unstubAllGlobals();
