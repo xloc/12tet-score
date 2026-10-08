@@ -8,6 +8,21 @@ export type Point = { x: number; y: number };
 export type Rect = { left: number; top: number; right: number; bottom: number };
 export type SelectionBox = Rect & { mode: 'contain' | 'intersect' };
 
+export function tickAtPoint(
+  point: Point,
+  lines: (Rect & { from: number; to: number })[],
+  ppq: number,
+) {
+  const line = lines.find((line) => point.y < line.bottom) ?? lines.at(-1)!;
+  if (point.y < line.top) return line.from;
+  const fraction = (point.x - line.left) / (line.right - line.left);
+  const cell = ppq / 4;
+  return Math.max(
+    line.from,
+    Math.min(line.to, line.from + Math.round((fraction * (line.to - line.from)) / cell) * cell),
+  );
+}
+
 export function selectionBox(start: Point, end: Point): SelectionBox {
   return {
     left: Math.min(start.x, end.x),

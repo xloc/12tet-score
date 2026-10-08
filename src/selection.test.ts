@@ -8,6 +8,7 @@ import {
   selectedIndices,
   selectionBox,
   selectionSpan,
+  tickAtPoint,
   type MusicSelection,
 } from './selection.ts';
 
@@ -18,6 +19,33 @@ const notes: Note[] = [
   { pitch: 67, at: 360, len: 120, voice: 2 },
   { pitch: 72, at: 960, len: 480, voice: 1 },
 ];
+
+test('time selection follows wrapped lines, including a shorter final line', () => {
+  const lines = [
+    { left: 0, top: 0, right: 800, bottom: 200, from: 0, to: 3840 },
+    { left: 0, top: 200, right: 800, bottom: 600, from: 3840, to: 7680 },
+    { left: 0, top: 600, right: 400, bottom: 900, from: 7680, to: 9600 },
+  ];
+  assert.equal(tickAtPoint({ x: 600, y: 20 }, lines, 480), 2880);
+  assert.equal(tickAtPoint({ x: 200, y: 220 }, lines, 480), 4800);
+  assert.equal(tickAtPoint({ x: 200, y: 620 }, lines, 480), 8640);
+  assert.equal(tickAtPoint({ x: 900, y: 620 }, lines, 480), 9600);
+  assert.equal(tickAtPoint({ x: -20, y: 220 }, lines, 480), 3840);
+  assert.equal(tickAtPoint({ x: 0, y: -20 }, lines, 480), 0);
+  assert.equal(tickAtPoint({ x: 400, y: 1000 }, lines, 480), 9600);
+  assert.equal(tickAtPoint({ x: 28, y: 220 }, lines, 480), 3960);
+});
+
+test('time selection in the gap between lines maps to their shared measure boundary', () => {
+  const lines = [
+    { left: 0, top: 0, right: 800, bottom: 200, from: 0, to: 3840 },
+    { left: 0, top: 216, right: 800, bottom: 600, from: 3840, to: 7680 },
+  ];
+  for (const x of [0, 400, 800]) {
+    assert.equal(tickAtPoint({ x, y: 208 }, lines, 480), 3840);
+  }
+  assert.equal(tickAtPoint({ x: 400, y: 220 }, lines, 480), 5760);
+});
 
 test('left-to-right contains whole notes; right-to-left includes partial notes', () => {
   const start = { x: 20, y: 20 };

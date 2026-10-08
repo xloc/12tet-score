@@ -1,0 +1,55 @@
+import { expect, test } from 'vite-plus/test';
+import { createSSRApp } from 'vue';
+import { renderToString } from 'vue/server-renderer';
+import type { Note } from '../music';
+import MusicNotation from './MusicNotation.vue';
+
+test('wrapped notation shows both segments of a held note with the same selection identity', async () => {
+  const notes: Note[] = [
+    { pitch: 60, at: 1440, len: 960, voice: 3 },
+    { pitch: 76, at: 1920, len: 480, voice: 1 },
+  ];
+  const html = await renderToString(
+    createSSRApp(MusicNotation, {
+      notes,
+      totalTicks: 3840,
+      ppq: 480,
+      ticksPerBar: 1920,
+      selection: { kind: 'notes', indices: [0] },
+    }),
+  );
+  expect(html.match(/data-score-line/g)).toHaveLength(2);
+  const segments = [
+    ...html.matchAll(/<button\b[^>]*data-note-index="0"[^>]*>[\s\S]*?<\/button>/g),
+  ].map((match) => match[0]);
+  expect(segments).toHaveLength(2);
+  for (const segment of segments) {
+    expect(segment).toContain('C4');
+    expect(segment).toContain('bg-teal-700');
+  }
+  expect(segments[0]).toContain('grid-column:13 / span 4');
+  expect(segments[0]).toContain('grid-row:1;');
+  expect(segments[0]).toContain('→');
+  expect(segments[1]).toContain('grid-column:1 / span 4');
+  expect(segments[1]).toContain('grid-row:17;');
+  expect(segments[1]).toContain('←');
+});
+
+test('a time range crossing a line break highlights each line within its own bounds', async () => {
+  const html = await renderToString(
+    createSSRApp(MusicNotation, {
+      notes: [
+        { pitch: 60, at: 0, len: 1920, voice: 1 },
+        { pitch: 72, at: 1920, len: 1920, voice: 1 },
+      ],
+      totalTicks: 3840,
+      ppq: 480,
+      ticksPerBar: 1920,
+      selection: { kind: 'range', from: 1440, to: 2400 },
+    }),
+  );
+  const highlights = html.match(/<span\b[^>]*border-x[^>]*>/g)!;
+  expect(highlights).toHaveLength(2);
+  expect(highlights[0]).toContain('grid-column:13 / 17');
+  expect(highlights[1]).toContain('grid-column:1 / 5');
+});

@@ -22,14 +22,14 @@ export function useDragSelection(
   let pointer: { id: number; target: Element } | null = null;
   let ignoreClick = false;
 
-  function start(event: PointerEvent, scope: SelectionDrag['scope']) {
+  function start(event: PointerEvent) {
     if (event.button !== 0 || !event.isPrimary || pointer) return;
     ignoreClick = false;
     const point = pointFromEvent(event);
     gesture.value = {
       start: point,
       end: point,
-      scope,
+      scope: event.altKey ? 'range' : 'box',
       additive: event.ctrlKey || event.metaKey || event.shiftKey,
     };
     // Preserve the original tap target when a note is inside the gesture surface.

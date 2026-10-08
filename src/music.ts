@@ -35,6 +35,29 @@ export function seconds(ticks: number, bpm: number) {
   return ((ticks / score.ppq) * 60) / bpm;
 }
 
+export function scoreLines(
+  notes: Note[],
+  totalTicks: number,
+  ticksPerBar: number,
+  barsPerLine: number,
+) {
+  const indexedNotes = notes.map((note, index) => ({ note, index }));
+  const ticksPerLine = ticksPerBar * barsPerLine;
+  return Array.from({ length: Math.ceil(totalTicks / ticksPerLine) }, (_, index) => {
+    const from = index * ticksPerLine;
+    const to = Math.min(from + ticksPerLine, totalTicks);
+    const lineNotes = indexedNotes.filter(({ note }) => note.at < to && note.at + note.len > from);
+    const pitches = lineNotes.length ? lineNotes.map(({ note }) => note.pitch) : [60];
+    return {
+      from,
+      to,
+      notes: lineNotes,
+      highestPitch: Math.max(...pitches),
+      lowestPitch: Math.min(...pitches),
+    };
+  });
+}
+
 export function notePlacement(
   note: Note,
   from: number,
@@ -46,7 +69,7 @@ export function notePlacement(
   const start = Math.max(note.at, from);
   const end = Math.min(note.at + note.len, to);
   return {
-    gridRow: highestPitch - note.pitch + 2,
+    gridRow: highestPitch - note.pitch + 1,
     gridColumn: `${1 + (start - from) / cell} / span ${(end - start) / cell}`,
   };
 }

@@ -25,6 +25,7 @@ function fixture(pointerType: string = 'mouse') {
       ctrlKey: false,
       metaKey: false,
       shiftKey: false,
+      altKey: false,
       target,
       currentTarget: {},
       ...overrides,
@@ -35,7 +36,7 @@ function fixture(pointerType: string = 'mouse') {
 
 test('taps capture the original note target and do not turn into box selections', () => {
   const selection = fixture('touch');
-  selection.start(selection.event(20, 20), 'box');
+  selection.start(selection.event(20, 20));
   assert(selection.captured.has(1));
   selection.move(selection.event(22, 23));
   assert.equal(selection.drag.value, null);
@@ -47,7 +48,7 @@ test('taps capture the original note target and do not turn into box selections'
 for (const pointerType of ['mouse', 'touch', 'pen']) {
   test(`${pointerType} commits the same directional drag and releases capture`, () => {
     const selection = fixture(pointerType);
-    selection.start(selection.event(60, 20), 'box');
+    selection.start(selection.event(60, 20));
     selection.move(selection.event(20, 60));
     assert.equal(selection.drag.value?.end.x, 20);
     selection.end(selection.event(15, 65));
@@ -64,24 +65,34 @@ for (const pointerType of ['mouse', 'touch', 'pen']) {
   });
 }
 
-test('range gestures preserve their scope and selection modifiers', () => {
+test('holding Alt starts a time range and preserves additive selection modifiers', () => {
   const selection = fixture();
-  selection.start(selection.event(20, 20, { metaKey: true }), 'range');
+  selection.start(selection.event(20, 20, { altKey: true, metaKey: true }));
   selection.end(selection.event(60, 20));
   assert.equal(selection.committed[0]?.scope, 'range');
   assert.equal(selection.committed[0]?.additive, true);
 });
 
+test('Ctrl, Command, and Shift keep normal drags as additive note selections', () => {
+  for (const modifiers of [{ ctrlKey: true }, { metaKey: true }, { shiftKey: true }]) {
+    const selection = fixture();
+    selection.start(selection.event(20, 20, modifiers));
+    selection.end(selection.event(60, 60));
+    assert.equal(selection.committed[0]?.scope, 'box');
+    assert.equal(selection.committed[0]?.additive, true);
+  }
+});
+
 test('a canceled touch or lost pointer capture never commits selection', () => {
   const selection = fixture('touch');
-  selection.start(selection.event(20, 20), 'box');
+  selection.start(selection.event(20, 20));
   selection.move(selection.event(60, 60));
   selection.cancel(selection.event(60, 60));
   selection.end(selection.event(60, 60));
   assert.equal(selection.committed.length, 0);
   assert.equal(selection.drag.value, null);
   assert.equal(selection.captured.size, 0);
-  selection.start(selection.event(20, 20), 'box');
+  selection.start(selection.event(20, 20));
   selection.target.releasePointerCapture(1);
   selection.cancel(selection.event(20, 20));
   assert.equal(selection.committed.length, 0);
@@ -89,11 +100,11 @@ test('a canceled touch or lost pointer capture never commits selection', () => {
 
 test('secondary pointers and non-primary buttons cannot replace an active gesture', () => {
   const selection = fixture('touch');
-  selection.start(selection.event(20, 20, { button: 2 }), 'box');
+  selection.start(selection.event(20, 20, { button: 2 }));
   assert.equal(selection.captured.size, 0);
-  selection.start(selection.event(20, 20), 'box');
-  const secondary = selection.event(60, 60, { pointerId: 2, isPrimary: false });
-  selection.start(secondary, 'range');
+  selection.start(selection.event(20, 20));
+  const secondary = selection.event(60, 60, { pointerId: 2, isPrimary: false, altKey: true });
+  selection.start(secondary);
   selection.move(secondary);
   selection.end(secondary);
   selection.cancel(secondary);
@@ -105,7 +116,7 @@ test('secondary pointers and non-primary buttons cannot replace an active gestur
 
 test('a drag suppresses the following pointer click while preserving keyboard activation', () => {
   const selection = fixture();
-  selection.start(selection.event(20, 20), 'box');
+  selection.start(selection.event(20, 20));
   selection.end(selection.event(60, 60));
   let prevented = 0;
   let stopped = 0;
@@ -126,7 +137,7 @@ test('a drag suppresses the following pointer click while preserving keyboard ac
 
 test('canceling an active gesture also suppresses its eventual click', () => {
   const selection = fixture();
-  selection.start(selection.event(20, 20), 'box');
+  selection.start(selection.event(20, 20));
   selection.cancel();
   selection.end(selection.event(20, 20));
   let prevented = false;
