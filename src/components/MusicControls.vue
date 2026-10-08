@@ -189,6 +189,10 @@ const infoFields = computed(() => {
           Fold gaps with at least this many unused pitches in a line. Set to 0 to disable.
         </p>
       </fieldset>
+      <label class="flex items-center">
+        <input id="variable-bar-width" v-model="sheet.variableBarWidth" type="checkbox" />
+        Variable bar width
+      </label>
     </div>
   </dialog>
 </template>

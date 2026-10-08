@@ -100,6 +100,32 @@ test('settings show the shared pitch-fold threshold', async () => {
   }
 });
 
+test('the variable bar width setting defaults to off and updates notation from shared state', async () => {
+  const pinia = createPinia();
+  const sheet = createScoreStore(pinia);
+  sheet.load({
+    ...score,
+    notes: [
+      ...Array.from({ length: 16 }, (_, index) => ({
+        pitch: 60,
+        at: index * 120,
+        len: 120,
+        voice: 1,
+      })),
+      { pitch: 72, at: 1920, len: 1920, voice: 2 },
+    ],
+  });
+  expect(sheet.variableBarWidth).toBe(false);
+  for (const enabled of [false, true, false]) {
+    sheet.variableBarWidth = enabled;
+    const html = await renderToString(createSSRApp(App).use(pinia));
+    const checkbox = html.match(/<input\b[^>]*id="variable-bar-width"[^>]*>/)![0];
+    expect(checkbox.includes(' checked')).toBe(enabled);
+    expect(html.match(/data-score-line/g)).toHaveLength(enabled ? 1 : 2);
+    expect(html).toContain('Variable bar width');
+  }
+});
+
 test('transport switches between Play, Pause, and Resume and always allows going to the start', async () => {
   for (const [status, tick, label] of [
     ['stopped', 0, 'Play'],

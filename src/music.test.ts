@@ -1,7 +1,23 @@
 import assert from 'node:assert/strict';
 import { test } from 'vite-plus/test';
-import { notePlacement, pitchLabel, pitchRows, scoreLines, seconds } from './music.ts';
-import { score, totalTicks, ticksPerBar, barCount } from './test/score';
+import {
+  notePlacement,
+  pitchLabel,
+  pitchRows,
+  scoreLines,
+  seconds,
+  type ScoreLayout,
+} from './music.ts';
+import { score, totalTicks, ticksPerBar, barCount, fixedGeometry } from './test/score';
+
+const layout: ScoreLayout = {
+  ppq: score.ppq,
+  ticksPerBar,
+  width: 512,
+  rem: 16,
+  foldThreshold: 0,
+  variableBarWidth: false,
+};
 
 test('the complete prelude has 35 measures, 549 notes, and three voices', () => {
   assert.equal(barCount, 35);
@@ -60,46 +76,69 @@ test('pitch labels retain register across octave boundaries', () => {
 
 test('duration is proportional and semitone geometry survives transposition', () => {
   const base = { pitch: 60, at: 0, len: 480, voice: 1 };
-  const rows = pitchRows([60, 72], 0);
-  assert.deepEqual(notePlacement(base, 0, ticksPerBar, rows, score.ppq), {
+  const notes = [base, { ...base, pitch: 72 }];
+  const line = scoreLines(notes, ticksPerBar, layout)[0]!;
+  assert.deepEqual(notePlacement(base, line, fixedGeometry(line)), {
     gridRow: 13,
-    gridColumn: '1 / span 4',
+    gridColumn: '1 / -1',
+    left: '0%',
+    width: '25%',
   });
-  assert.deepEqual(notePlacement({ ...base, len: 960 }, 0, ticksPerBar, rows, score.ppq), {
+  assert.deepEqual(notePlacement({ ...base, len: 960 }, line, fixedGeometry(line)), {
     gridRow: 13,
-    gridColumn: '1 / span 8',
+    gridColumn: '1 / -1',
+    left: '0%',
+    width: '50%',
   });
   const third = { ...base, pitch: 64 };
   assert.equal(
-    notePlacement(base, 0, ticksPerBar, rows, score.ppq).gridRow -
-      notePlacement(third, 0, ticksPerBar, rows, score.ppq).gridRow,
+    notePlacement(base, line, fixedGeometry(line)).gridRow -
+      notePlacement(third, line, fixedGeometry(line)).gridRow,
     4,
   );
   assert.deepEqual(
-    notePlacement({ ...base, pitch: 62 }, 0, ticksPerBar, pitchRows([62, 74], 0), score.ppq),
-    notePlacement(base, 0, ticksPerBar, rows, score.ppq),
+    notePlacement(
+      { ...base, pitch: 62 },
+      scoreLines(
+        notes.map((note) => ({ ...note, pitch: note.pitch + 2 })),
+        ticksPerBar,
+        layout,
+      )[0]!,
+      fixedGeometry(line),
+    ),
+    notePlacement(base, line, fixedGeometry(line)),
   );
 });
 
 test('a held note crossing the viewing boundary is clipped without changing source duration', () => {
   const note = { pitch: 60, at: 1800, len: 480, voice: 1 };
-  assert.deepEqual(notePlacement(note, 1920, 3840, pitchRows([60, 72], 0), score.ppq), {
+  const line = scoreLines([note, { ...note, pitch: 72 }], 3840, layout)[1]!;
+  assert.deepEqual(notePlacement(note, line, fixedGeometry(line)), {
     gridRow: 13,
-    gridColumn: '1 / span 3',
+    gridColumn: '1 / -1',
+    left: '0%',
+    width: '18.75%',
   });
   assert.equal(note.len, 480);
 });
 
 test('notation geometry uses the supplied tick resolution instead of the demo score', () => {
   const note = { pitch: 60, at: 240, len: 240, voice: 1 };
-  assert.deepEqual(notePlacement(note, 0, 960, pitchRows([60, 72], 0), 240), {
+  const line = scoreLines([note, { ...note, pitch: 72 }], 960, {
+    ...layout,
+    ppq: 240,
+    ticksPerBar: 960,
+  })[0]!;
+  assert.deepEqual(notePlacement(note, line, fixedGeometry(line)), {
     gridRow: 13,
-    gridColumn: '5 / span 4',
+    gridColumn: '1 / -1',
+    left: '25%',
+    width: '25%',
   });
 });
 
 test('score lines break at measure boundaries and crop each line to its sounding pitches', () => {
-  const lines = scoreLines(score.notes, totalTicks, ticksPerBar, 2, 0);
+  const lines = scoreLines(score.notes, totalTicks, { ...layout, width: 1024 });
   assert.equal(lines.length, 18);
   assert.deepEqual(
     lines.slice(0, 2).map(({ from, to }) => ({ from, to })),
@@ -125,27 +164,31 @@ test('score lines break at measure boundaries and crop each line to its sounding
 test('notes held across a line break keep their identity and contribute to both pitch ranges', () => {
   const held = { pitch: 48, at: 1440, len: 960, voice: 3 };
   const upper = { pitch: 76, at: 1920, len: 480, voice: 1 };
-  const lines = scoreLines([held, upper], 3840, 1920, 1, 0);
+  const lines = scoreLines([held, upper], 3840, layout);
   assert.equal(lines[0]!.notes[0]!.note, held);
   assert.equal(lines[1]!.notes[0]!.note, held);
   assert.equal(lines[0]!.notes[0]!.index, lines[1]!.notes[0]!.index);
   assert.deepEqual(lines[0]!.rows, [48]);
   assert.equal(lines[1]!.rows.at(-1), 48);
   assert.equal(lines[1]!.rows[0], 76);
-  assert.deepEqual(notePlacement(held, 0, 1920, lines[0]!.rows, 480), {
+  assert.deepEqual(notePlacement(held, lines[0]!, fixedGeometry(lines[0]!)), {
     gridRow: 1,
-    gridColumn: '13 / span 4',
+    gridColumn: '1 / -1',
+    left: '75%',
+    width: '25%',
   });
-  assert.deepEqual(notePlacement(held, 1920, 3840, lines[1]!.rows, 480), {
+  assert.deepEqual(notePlacement(held, lines[1]!, fixedGeometry(lines[1]!)), {
     gridRow: 29,
-    gridColumn: '1 / span 4',
+    gridColumn: '1 / -1',
+    left: '0%',
+    width: '25%',
   });
   assert.equal(held.len, 960);
 });
 
 test('changing line width changes wrapping without changing notes or elapsed time', () => {
   for (const barsPerLine of [1, 2, 3, 4]) {
-    const lines = scoreLines(score.notes, totalTicks, ticksPerBar, barsPerLine, 0);
+    const lines = scoreLines(score.notes, totalTicks, { ...layout, width: 512 * barsPerLine });
     assert.equal(lines[0]!.from, 0);
     assert.equal(lines.at(-1)!.to, totalTicks);
     assert.equal(
@@ -164,7 +207,7 @@ test('a silent measure keeps its place between sounding measures', () => {
     { pitch: 60, at: 0, len: 480, voice: 1 },
     { pitch: 72, at: 3840, len: 480, voice: 1 },
   ];
-  const lines = scoreLines(notes, 5760, 1920, 1, 12);
+  const lines = scoreLines(notes, 5760, { ...layout, foldThreshold: 12 });
   assert.equal(lines.length, 3);
   assert.equal(lines[1]!.notes.length, 0);
   assert.equal(lines[1]!.from, 1920);
@@ -204,7 +247,7 @@ test('folding includes every pitch used anywhere in the line and carried held no
     { pitch: 60, at: 1920, len: 120, voice: 2 },
     { pitch: 76, at: 2400, len: 480, voice: 1 },
   ];
-  const lines = scoreLines(notes, 3840, 1920, 1, 12);
+  const lines = scoreLines(notes, 3840, { ...layout, foldThreshold: 12 });
   assert.deepEqual(lines[0]!.rows, [48]);
   assert.deepEqual(lines[1]!.rows, [
     76,
@@ -224,9 +267,11 @@ test('folding includes every pitch used anywhere in the line and carried held no
     48,
   ]);
   assert.equal(lines[1]!.notes[0]!.note, notes[0]);
-  assert.deepEqual(notePlacement(notes[0]!, 1920, 3840, lines[1]!.rows, 480), {
+  assert.deepEqual(notePlacement(notes[0]!, lines[1]!, fixedGeometry(lines[1]!)), {
     gridRow: 15,
-    gridColumn: '1 / span 4',
+    gridColumn: '1 / -1',
+    left: '0%',
+    width: '25%',
   });
   for (const { note, index } of lines[1]!.notes) {
     assert.equal(note, notes[index]);

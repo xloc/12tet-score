@@ -28,6 +28,7 @@ onBeforeUnmount(playback.stop);
       :ppq="sheet.score.ppq"
       :ticks-per-bar="sheet.ticksPerBar"
       :fold-threshold="sheet.foldThreshold"
+      :variable-bar-width="sheet.variableBarWidth"
       :playhead="playback.currentTick"
       :playing="playback.playing"
       :selection="sheet.selection"

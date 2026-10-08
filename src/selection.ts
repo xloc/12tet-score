@@ -1,4 +1,4 @@
-import type { Note } from './music.ts';
+import { tickAtPosition, type Note, type ScoreGeometry } from './music.ts';
 
 export type MusicSelection =
   | { kind: 'notes'; indices: number[] }
@@ -10,16 +10,16 @@ export type SelectionBox = Rect & { mode: 'contain' | 'intersect' };
 
 export function tickAtPoint(
   point: Point,
-  lines: (Rect & { from: number; to: number })[],
+  lines: (Rect & ScoreGeometry & { from: number; to: number })[],
   ppq: number,
 ) {
   const line = lines.find((line) => point.y < line.bottom) ?? lines.at(-1)!;
   if (point.y < line.top) return line.from;
-  const fraction = (point.x - line.left) / (line.right - line.left);
+  const tick = tickAtPosition(point.x - line.left, line.bars);
   const cell = ppq / 4;
   return Math.max(
     line.from,
-    Math.min(line.to, line.from + Math.round((fraction * (line.to - line.from)) / cell) * cell),
+    Math.min(line.to, line.from + Math.round((tick - line.from) / cell) * cell),
   );
 }
 

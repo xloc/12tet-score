@@ -16,6 +16,7 @@ test('wrapped notation shows both segments of a held note with the same selectio
       ppq: 480,
       ticksPerBar: 1920,
       foldThreshold: 0,
+      variableBarWidth: false,
       playhead: 0,
       playing: false,
       selection: { kind: 'notes', indices: [0] },
@@ -34,10 +35,10 @@ test('wrapped notation shows both segments of a held note with the same selectio
     expect(segment).toContain('C4');
     expect(segment).toContain('bg-teal-700');
   }
-  expect(segments[0]).toContain('grid-column:13 / span 4');
+  expect(segments[0]).toContain('grid-column:1 / -1');
   expect(segments[0]).toContain('grid-row:1;');
   expect(segments[0]).toContain('→');
-  expect(segments[1]).toContain('grid-column:1 / span 4');
+  expect(segments[1]).toContain('grid-column:1 / -1');
   expect(segments[1]).toContain('grid-row:17;');
   expect(segments[1]).toContain('←');
 });
@@ -53,6 +54,7 @@ test('a time range crossing a line break highlights each line within its own bou
       ppq: 480,
       ticksPerBar: 1920,
       foldThreshold: 0,
+      variableBarWidth: false,
       playhead: 0,
       playing: false,
       selection: { kind: 'range', from: 1440, to: 2400 },
@@ -60,8 +62,10 @@ test('a time range crossing a line break highlights each line within its own bou
   );
   const highlights = html.match(/<span\b[^>]*border-x[^>]*>/g)!;
   expect(highlights).toHaveLength(2);
-  expect(highlights[0]).toContain('grid-column:13 / 17');
-  expect(highlights[1]).toContain('grid-column:1 / 5');
+  for (const highlight of highlights) {
+    expect(highlight).toContain('grid-column:1 / -1');
+    expect(highlight).toContain('display:none');
+  }
 });
 
 test('folded notation leaves blank pitch gaps and retains note timing, labels, and selection', async () => {
@@ -76,6 +80,7 @@ test('folded notation leaves blank pitch gaps and retains note timing, labels, a
         ppq: 480,
         ticksPerBar: 1920,
         foldThreshold,
+        variableBarWidth: false,
         playhead: 0,
         playing: false,
         selection: { kind: 'notes', indices: [0] },
@@ -87,10 +92,10 @@ test('folded notation leaves blank pitch gaps and retains note timing, labels, a
     expect(notes).toHaveLength(2);
     expect(notes[0]).toContain('C3');
     expect(notes[0]).toContain('bg-teal-700');
-    expect(notes[0]).toContain('grid-column:1 / span 16');
+    expect(notes[0]).toContain('grid-column:1 / -1');
     expect(notes[0]).toContain(`grid-row:${foldThreshold ? 3 : 25};`);
     expect(notes[1]).toContain('C5');
-    expect(notes[1]).toContain('grid-column:5 / span 4');
+    expect(notes[1]).toContain('grid-column:1 / -1');
     expect(notes[1]).toContain('grid-row:1;');
     const guides = html.match(/<span\b[^>]*h-px self-center[^>]*>/g)!;
     expect(guides).toHaveLength(foldThreshold ? 2 : 3);
@@ -112,13 +117,13 @@ test('folded notation leaves blank pitch gaps and retains note timing, labels, a
   }
 });
 
-test('one playhead follows wrapped lines and reaches the shorter final line end', async () => {
-  for (const [playhead, lineIndex, percent] of [
-    [0, 0, 0],
-    [960, 0, 50],
-    [1920, 1, 0],
-    [2160, 1, 50],
-    [2400, 1, 100],
+test('one playhead belongs to the correct wrapped line while awaiting browser geometry', async () => {
+  for (const [playhead, lineIndex] of [
+    [0, 0],
+    [960, 0],
+    [1920, 1],
+    [2160, 1],
+    [2400, 1],
   ] as const) {
     const html = await renderToString(
       createSSRApp(MusicNotation, {
@@ -130,16 +135,17 @@ test('one playhead follows wrapped lines and reaches the shorter final line end'
         ppq: 480,
         ticksPerBar: 1920,
         foldThreshold: 0,
+        variableBarWidth: false,
         playhead,
         playing: false,
         selection: { kind: 'notes', indices: [] },
       }),
     );
-    const lines = html.match(/<div\b[^>]*data-score-line[^>]*>[\s\S]*?<\/div>/g)!;
+    const lines = html.split(/<div\b[^>]*data-score-line/).slice(1);
     expect(html.match(/data-playhead/g)).toHaveLength(1);
     expect(lines[lineIndex]).toContain('data-playhead');
     const marker = lines[lineIndex]!.match(/<span\b[^>]*data-playhead[^>]*>/)![0];
-    expect(marker).toContain(`left:min(${percent}%, calc(100% - 1px))`);
+    expect(marker).toContain('display:none');
   }
 });
 
@@ -151,13 +157,51 @@ test('a score ending partway through a beat keeps its guide within the final lin
       ppq: 480,
       ticksPerBar: 1920,
       foldThreshold: 0,
+      variableBarWidth: false,
       playhead: 0,
       playing: false,
       selection: { kind: 'notes', indices: [] },
     }),
   );
   expect(html.match(/data-time-label/g)).toHaveLength(1);
-  expect(html).toContain('grid-template-columns:repeat(1, minmax(0, 1fr))');
-  expect(html).toContain('grid-column:1 / span 1');
-  expect(html).not.toContain('grid-column:1 / span 4');
+  expect(html).toContain('min-width:32px;max-width:32px;grid-template-columns:minmax(0, 1fr)');
+  expect(html).toContain('data-bar-to="120"');
+});
+
+test('variable bars delegate sizing to flexbox and wait for measurement before drawing time positions', async () => {
+  const html = await renderToString(
+    createSSRApp(MusicNotation, {
+      notes: [
+        ...Array.from({ length: 16 }, (_, index) => ({
+          pitch: 60,
+          at: index * 120,
+          len: 120,
+          voice: 1,
+        })),
+        { pitch: 72, at: 1920, len: 1920, voice: 2 },
+      ],
+      totalTicks: 3840,
+      ppq: 480,
+      ticksPerBar: 1920,
+      foldThreshold: 12,
+      variableBarWidth: true,
+      playhead: 2880,
+      playing: false,
+      selection: { kind: 'range', from: 1920, to: 3840 },
+    }),
+  );
+  expect(html.match(/data-score-line/g)).toHaveLength(1);
+  expect(html.match(/data-time-label/g)).toHaveLength(8);
+  const bars = html.match(/<span\b[^>]*data-score-bar[^>]*>/g)!;
+  expect(bars).toHaveLength(2);
+  expect(bars[0]).toContain('flex-basis:512px;flex-grow:512;flex-shrink:1;min-width:384px');
+  expect(bars[1]).toContain('flex-basis:128px;flex-grow:128;flex-shrink:1;min-width:96px');
+  const marker = html.match(/<span\b[^>]*data-playhead[^>]*>/)![0];
+  expect(marker).toContain('display:none');
+  const chord = html.match(/<button\b[^>]*data-note-index="16"[^>]*>/)![0];
+  const highlight = html.match(/<span\b[^>]*border-x[^>]*>/)![0];
+  expect(chord).toContain('display:none');
+  expect(highlight).toContain('display:none');
+  expect(html).toContain('min-width:480px;max-width:640px');
+  expect(html).toContain('C5');
 });

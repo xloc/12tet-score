@@ -16,7 +16,7 @@ const next: Score = {
 
 afterEach(() => vi.unstubAllGlobals());
 
-test('replacing the score updates timing and resets selection while retaining folding settings', () => {
+test('replacing the score updates timing and resets selection while retaining layout settings', () => {
   const sheet = useScoreStore(createPinia());
   expect(sheet.score).toBeNull();
   expect(sheet.totalTicks).toBe(0);
@@ -24,9 +24,11 @@ test('replacing the score updates timing and resets selection while retaining fo
   expect(sheet.barCount).toBe(0);
   expect(sheet.selectedNotes).toEqual([]);
   expect(sheet.span).toBeNull();
+  expect(sheet.variableBarWidth).toBe(false);
   sheet.load(initialScore);
   sheet.selection = { kind: 'notes', indices: [548] };
   sheet.foldThreshold = 6;
+  sheet.variableBarWidth = true;
   sheet.load(next);
   expect(sheet.score).toEqual(next);
   expect(sheet.totalTicks).toBe(1440);
@@ -36,6 +38,7 @@ test('replacing the score updates timing and resets selection while retaining fo
   expect(sheet.selectedNotes).toEqual([]);
   expect(sheet.span).toBeNull();
   expect(sheet.foldThreshold).toBe(6);
+  expect(sheet.variableBarWidth).toBe(true);
   sheet.selection = { kind: 'range', from: 720, to: 960 };
   expect(sheet.selectedNotes).toEqual(next.notes);
   expect(sheet.span).toEqual({ from: 720, to: 960 });

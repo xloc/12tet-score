@@ -18,6 +18,7 @@ export const useScoreStore = defineStore('score', () => {
     ticksPerBar.value ? Math.ceil(totalTicks.value / ticksPerBar.value) : 0,
   );
   const foldThreshold = ref(12);
+  const variableBarWidth = ref(false);
   const selection = ref<MusicSelection>({ kind: 'notes', indices: [] });
   const selectedNotes = computed(() =>
     score.value
@@ -86,6 +87,7 @@ export const useScoreStore = defineStore('score', () => {
     ticksPerBar,
     barCount,
     foldThreshold,
+    variableBarWidth,
     selection,
     selectedNotes,
     span,

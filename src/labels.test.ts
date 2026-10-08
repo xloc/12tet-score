@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'vite-plus/test';
 import { placePitchLabels } from './labels';
-import { pitchLabel, scoreLines } from './music';
+import { pitchLabel, positionAtTick, scoreLines } from './music';
 import { boxHits, type Rect } from './selection';
-import { score, ticksPerBar, totalTicks } from './test/score';
+import { score, ticksPerBar, totalTicks, fixedGeometry } from './test/score';
 
 function assertClear(
   notes: { bar: Rect; width: number; height: number }[],
@@ -15,7 +15,7 @@ function assertClear(
   for (const [index, label] of labels.entries()) {
     assert(label.left >= 0 && label.right <= width);
     assert(label.top >= 0 && label.bottom <= height);
-    assert.equal(label.right - label.left, notes[index]!.width);
+    assert(Math.abs(label.right - label.left - notes[index]!.width) < 1e-9);
     assert.equal(label.bottom - label.top, notes[index]!.height);
     const box = { ...label, mode: 'intersect' as const };
     assert(
@@ -82,65 +82,74 @@ test('relocated labels leave folded pitch gaps clear', () => {
 });
 
 test('compact labels remain clear across neighboring prelude lines at phone and desktop widths', () => {
-  for (const [width, barsPerLine] of [
-    [375, 1],
-    [1024, 2],
-    [1440, 2],
-  ] as const) {
-    for (const foldThreshold of [0, 3, 6, 12, 24]) {
-      let height = 16;
-      const obstacles: Rect[] = [];
-      const lines = scoreLines(score.notes, totalTicks, ticksPerBar, barsPerLine, foldThreshold);
-      const notes = lines.flatMap((line, index) => {
-        const lineWidth = (width * (line.to - line.from)) / (barsPerLine * ticksPerBar);
-        const lineTop = height;
-        const beatsPerBar = ticksPerBar / score.ppq;
-        for (let beat = 0; beat < (line.to - line.from) / score.ppq; beat++) {
-          const number =
-            beat % beatsPerBar === 0
-              ? 1 + line.from / ticksPerBar + Math.floor(beat / beatsPerBar)
-              : (beat % beatsPerBar) + 1;
-          const left = ((beat * score.ppq) / (line.to - line.from)) * lineWidth;
-          obstacles.push({
-            left,
-            right: left + String(number).length * 6 + 8,
-            top: lineTop - 16,
-            bottom: lineTop,
-          });
-        }
-        const rowTops = line.rows.map((row) => {
-          const top = height;
-          height += 8;
-          if (typeof row !== 'number') {
-            obstacles.push({ left: 0, top, right: lineWidth, bottom: height });
+  for (const width of [375, 1024, 1440]) {
+    for (const variableBarWidth of [false, true]) {
+      for (const foldThreshold of [0, 3, 6, 12, 24]) {
+        let height = 16;
+        const obstacles: Rect[] = [];
+        const lines = scoreLines(score.notes, totalTicks, {
+          ppq: score.ppq,
+          ticksPerBar,
+          width,
+          rem: 16,
+          foldThreshold,
+          variableBarWidth,
+        });
+        const geometries = lines.map((line) =>
+          fixedGeometry(
+            line,
+            line.bars.map((bar) => (variableBarWidth ? bar.minimum : bar.preferred)),
+          ),
+        );
+        const contentWidth = Math.ceil(
+          Math.max(width, ...geometries.map((geometry) => geometry.width)),
+        );
+        const notes = lines.flatMap((line, index) => {
+          const geometry = geometries[index]!;
+          const lineWidth = geometry.width;
+          const lineTop = height;
+          for (const beat of line.beats) {
+            const number = beat.number === 1 ? beat.bar : beat.number;
+            const left = positionAtTick(beat.from, geometry.bars);
+            obstacles.push({
+              left,
+              right: left + String(number).length * 6 + 8,
+              top: lineTop - 16,
+              bottom: lineTop,
+            });
           }
-          return top;
+          const rowTops = line.rows.map((row) => {
+            const top = height;
+            height += 8;
+            if (typeof row !== 'number') {
+              obstacles.push({ left: 0, top, right: lineWidth, bottom: height });
+            }
+            return top;
+          });
+          height += index === lines.length - 1 ? 16 : 48;
+          return line.notes.map(({ note }) => {
+            const top = rowTops[line.rows.indexOf(note.pitch)]! + 2;
+            return {
+              bar: {
+                left: positionAtTick(note.at, geometry.bars),
+                right: positionAtTick(note.at + note.len, geometry.bars),
+                top,
+                bottom: top + 4,
+              },
+              width: pitchLabel(note.pitch).length * 7 + 4,
+              height: 16,
+            };
+          });
         });
-        height += index === lines.length - 1 ? 16 : 48;
-        return line.notes.map(({ note }) => {
-          const top = rowTops[line.rows.indexOf(note.pitch)]! + 2;
-          return {
-            bar: {
-              left:
-                ((Math.max(note.at, line.from) - line.from) / (line.to - line.from)) * lineWidth,
-              right:
-                ((Math.min(note.at + note.len, line.to) - line.from) / (line.to - line.from)) *
-                lineWidth,
-              top,
-              bottom: top + 4,
-            },
-            width: pitchLabel(note.pitch).length * 7 + 4,
-            height: 16,
-          };
-        });
-      });
-      assertClear(
-        notes,
-        placePitchLabels(notes, width, height, obstacles),
-        width,
-        height,
-        obstacles,
-      );
+        assert(notes.length >= score.notes.length);
+        assertClear(
+          notes,
+          placePitchLabels(notes, contentWidth, height, obstacles),
+          contentWidth,
+          height,
+          obstacles,
+        );
+      }
     }
   }
 });
