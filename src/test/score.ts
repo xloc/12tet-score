@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { createPinia, type Pinia } from 'pinia';
-import type { Score, ScoreGeometry, ScoreLine } from '../music';
+import type { Score } from '../music';
+import type { ScoreLine } from '../layout';
 import { useScoreStore } from '../stores/score';
 
 export const score: Score = JSON.parse(
@@ -19,7 +20,7 @@ export const { totalTicks, ticksPerBar, barCount } = createScoreStore();
 export function fixedGeometry(
   line: ScoreLine,
   widths: number[] = line.bars.map((bar) => bar.preferred),
-): ScoreGeometry {
+) {
   let left = 0;
   const bars = line.bars.map((bar, index) => {
     const width = widths[index]!;
@@ -28,4 +29,9 @@ export function fixedGeometry(
     return result;
   });
   return { width: left, bars };
+}
+
+export function positionAtTick(tick: number, bars: ReturnType<typeof fixedGeometry>['bars']) {
+  const bar = bars.find((bar) => tick < bar.to) ?? bars.at(-1)!;
+  return bar.left + Math.max(0, Math.min(1, (tick - bar.from) / (bar.to - bar.from))) * bar.width;
 }

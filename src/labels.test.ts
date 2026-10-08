@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'vite-plus/test';
 import { placePitchLabels } from './labels';
-import { pitchLabel, positionAtTick, scoreLines } from './music';
+import { pitchLabel } from './music';
+import { scoreLines } from './layout';
 import { boxHits, type Rect } from './selection';
-import { score, ticksPerBar, totalTicks, fixedGeometry } from './test/score';
+import { score, ticksPerBar, totalTicks, fixedGeometry, positionAtTick } from './test/score';
 
 function assertClear(
   notes: { bar: Rect; width: number; height: number }[],
@@ -108,7 +109,7 @@ test('compact labels remain clear across neighboring prelude lines at phone and 
           const geometry = geometries[index]!;
           const lineWidth = geometry.width;
           const lineTop = height;
-          for (const beat of line.beats) {
+          for (const beat of line.bars.flatMap((bar) => bar.beats)) {
             const number = beat.number === 1 ? beat.bar : beat.number;
             const left = positionAtTick(beat.from, geometry.bars);
             obstacles.push({

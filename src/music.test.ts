@@ -1,14 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'vite-plus/test';
-import {
-  notePlacement,
-  pitchLabel,
-  pitchRows,
-  scoreLines,
-  seconds,
-  type ScoreLayout,
-} from './music.ts';
-import { score, totalTicks, ticksPerBar, barCount, fixedGeometry } from './test/score';
+import { pitchLabel, seconds } from './music.ts';
+import { notePlacement, pitchRows, scoreLines, type ScoreLayout } from './layout';
+import { score, totalTicks, ticksPerBar, barCount } from './test/score';
 
 const layout: ScoreLayout = {
   ppq: score.ppq,
@@ -78,13 +72,13 @@ test('duration is proportional and semitone geometry survives transposition', ()
   const base = { pitch: 60, at: 0, len: 480, voice: 1 };
   const notes = [base, { ...base, pitch: 72 }];
   const line = scoreLines(notes, ticksPerBar, layout)[0]!;
-  assert.deepEqual(notePlacement(base, line, fixedGeometry(line)), {
+  assert.deepEqual(notePlacement(base, line, line.bars[0]!), {
     gridRow: 13,
     gridColumn: '1 / -1',
     left: '0%',
     width: '25%',
   });
-  assert.deepEqual(notePlacement({ ...base, len: 960 }, line, fixedGeometry(line)), {
+  assert.deepEqual(notePlacement({ ...base, len: 960 }, line, line.bars[0]!), {
     gridRow: 13,
     gridColumn: '1 / -1',
     left: '0%',
@@ -92,8 +86,8 @@ test('duration is proportional and semitone geometry survives transposition', ()
   });
   const third = { ...base, pitch: 64 };
   assert.equal(
-    notePlacement(base, line, fixedGeometry(line)).gridRow -
-      notePlacement(third, line, fixedGeometry(line)).gridRow,
+    notePlacement(base, line, line.bars[0]!).gridRow -
+      notePlacement(third, line, line.bars[0]!).gridRow,
     4,
   );
   assert.deepEqual(
@@ -104,16 +98,16 @@ test('duration is proportional and semitone geometry survives transposition', ()
         ticksPerBar,
         layout,
       )[0]!,
-      fixedGeometry(line),
+      line.bars[0]!,
     ),
-    notePlacement(base, line, fixedGeometry(line)),
+    notePlacement(base, line, line.bars[0]!),
   );
 });
 
 test('a held note crossing the viewing boundary is clipped without changing source duration', () => {
   const note = { pitch: 60, at: 1800, len: 480, voice: 1 };
   const line = scoreLines([note, { ...note, pitch: 72 }], 3840, layout)[1]!;
-  assert.deepEqual(notePlacement(note, line, fixedGeometry(line)), {
+  assert.deepEqual(notePlacement(note, line, line.bars[0]!), {
     gridRow: 13,
     gridColumn: '1 / -1',
     left: '0%',
@@ -129,7 +123,7 @@ test('notation geometry uses the supplied tick resolution instead of the demo sc
     ppq: 240,
     ticksPerBar: 960,
   })[0]!;
-  assert.deepEqual(notePlacement(note, line, fixedGeometry(line)), {
+  assert.deepEqual(notePlacement(note, line, line.bars[0]!), {
     gridRow: 13,
     gridColumn: '1 / -1',
     left: '25%',
@@ -171,13 +165,13 @@ test('notes held across a line break keep their identity and contribute to both 
   assert.deepEqual(lines[0]!.rows, [48]);
   assert.equal(lines[1]!.rows.at(-1), 48);
   assert.equal(lines[1]!.rows[0], 76);
-  assert.deepEqual(notePlacement(held, lines[0]!, fixedGeometry(lines[0]!)), {
+  assert.deepEqual(notePlacement(held, lines[0]!, lines[0]!.bars[0]!), {
     gridRow: 1,
     gridColumn: '1 / -1',
     left: '75%',
     width: '25%',
   });
-  assert.deepEqual(notePlacement(held, lines[1]!, fixedGeometry(lines[1]!)), {
+  assert.deepEqual(notePlacement(held, lines[1]!, lines[1]!.bars[0]!), {
     gridRow: 29,
     gridColumn: '1 / -1',
     left: '0%',
@@ -267,7 +261,7 @@ test('folding includes every pitch used anywhere in the line and carried held no
     48,
   ]);
   assert.equal(lines[1]!.notes[0]!.note, notes[0]);
-  assert.deepEqual(notePlacement(notes[0]!, lines[1]!, fixedGeometry(lines[1]!)), {
+  assert.deepEqual(notePlacement(notes[0]!, lines[1]!, lines[1]!.bars[0]!), {
     gridRow: 15,
     gridColumn: '1 / -1',
     left: '0%',

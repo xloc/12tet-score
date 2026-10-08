@@ -60,11 +60,11 @@ test('a time range crossing a line break highlights each line within its own bou
       selection: { kind: 'range', from: 1440, to: 2400 },
     }),
   );
-  const highlights = html.match(/<span\b[^>]*border-x[^>]*>/g)!;
+  const highlights = html.match(/<span\b[^>]*data-time-range[^>]*>/g)!;
   expect(highlights).toHaveLength(2);
   for (const highlight of highlights) {
     expect(highlight).toContain('grid-column:1 / -1');
-    expect(highlight).toContain('display:none');
+    expect(highlight).not.toContain('display:none');
   }
 });
 
@@ -117,7 +117,7 @@ test('folded notation leaves blank pitch gaps and retains note timing, labels, a
   }
 });
 
-test('one playhead belongs to the correct wrapped line while awaiting browser geometry', async () => {
+test('one playhead belongs to the correct wrapped line without waiting for measurement', async () => {
   for (const [playhead, lineIndex] of [
     [0, 0],
     [960, 0],
@@ -145,7 +145,7 @@ test('one playhead belongs to the correct wrapped line while awaiting browser ge
     expect(html.match(/data-playhead/g)).toHaveLength(1);
     expect(lines[lineIndex]).toContain('data-playhead');
     const marker = lines[lineIndex]!.match(/<span\b[^>]*data-playhead[^>]*>/)![0];
-    expect(marker).toContain('display:none');
+    expect(marker).not.toContain('display:none');
   }
 });
 
@@ -164,11 +164,11 @@ test('a score ending partway through a beat keeps its guide within the final lin
     }),
   );
   expect(html.match(/data-time-label/g)).toHaveLength(1);
-  expect(html).toContain('min-width:32px;max-width:32px;grid-template-columns:minmax(0, 1fr)');
-  expect(html).toContain('data-bar-to="120"');
+  expect(html).toContain('min-width:32px;max-width:32px');
+  expect(html).toContain('width:100%');
 });
 
-test('variable bars delegate sizing to flexbox and wait for measurement before drawing time positions', async () => {
+test('variable bars delegate sizing to flexbox and draw directly in each bar', async () => {
   const html = await renderToString(
     createSSRApp(MusicNotation, {
       notes: [
@@ -192,16 +192,18 @@ test('variable bars delegate sizing to flexbox and wait for measurement before d
   );
   expect(html.match(/data-score-line/g)).toHaveLength(1);
   expect(html.match(/data-time-label/g)).toHaveLength(8);
-  const bars = html.match(/<span\b[^>]*data-score-bar[^>]*>/g)!;
+  const bars = html.match(/<div\b[^>]*data-score-bar[^>]*>/g)!;
   expect(bars).toHaveLength(2);
   expect(bars[0]).toContain('flex-basis:512px;flex-grow:512;flex-shrink:1;min-width:384px');
   expect(bars[1]).toContain('flex-basis:128px;flex-grow:128;flex-shrink:1;min-width:96px');
   const marker = html.match(/<span\b[^>]*data-playhead[^>]*>/)![0];
-  expect(marker).toContain('display:none');
+  expect(marker).not.toContain('display:none');
+  expect(marker).toContain('min(50%, calc(100% - 1px))');
   const chord = html.match(/<button\b[^>]*data-note-index="16"[^>]*>/)![0];
-  const highlight = html.match(/<span\b[^>]*border-x[^>]*>/)![0];
-  expect(chord).toContain('display:none');
-  expect(highlight).toContain('display:none');
+  const highlight = html.match(/<span\b[^>]*data-time-range[^>]*>/)![0];
+  expect(chord).not.toContain('display:none');
+  expect(chord).toContain('left:0%;width:100%');
+  expect(highlight).not.toContain('display:none');
   expect(html).toContain('min-width:480px;max-width:640px');
   expect(html).toContain('C5');
 });

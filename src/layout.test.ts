@@ -1,16 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'vite-plus/test';
-import {
-  notePlacement,
-  positionAtTick,
-  scoreLines,
-  tickAtPosition,
-  timePlacement,
-  type Note,
-  type ScoreLayout,
-} from './music';
+import { notePlacement, barPosition, scoreLines, timePlacement, type ScoreLayout } from './layout';
+import type { Note } from './music';
 import { tickAtPoint } from './selection';
-import { score, totalTicks, fixedGeometry } from './test/score';
+import { score, totalTicks, fixedGeometry, positionAtTick } from './test/score';
 
 const layout: ScoreLayout = {
   ppq: 480,
@@ -87,16 +80,27 @@ test('moderate compression fits a simple chord into the preceding line', () => {
 test('seeking and range placement share the nonuniform playback time mapping', () => {
   const line = scoreLines([...dense, ...chord], 3840, layout)[0]!;
   const geometry = fixedGeometry(line, [409.6, 102.4]);
-  const bounds = [{ ...line, ...geometry, left: 40, right: 552, top: 100, bottom: 300 }];
+  const bounds = [
+    {
+      ...line,
+      left: 40,
+      right: 552,
+      top: 100,
+      bottom: 300,
+      bars: geometry.bars.map((bar) => ({
+        ...bar,
+        left: 40 + bar.left,
+        right: 40 + bar.left + bar.width,
+      })),
+    },
+  ];
   for (const tick of [0, 120, 480, 1800, 1920, 2040, 2880, 3840]) {
     const position = positionAtTick(tick, geometry.bars);
-    assert(Math.abs(tickAtPosition(position, geometry.bars) - tick) < 1e-9);
     assert.equal(tickAtPoint({ x: 40 + position, y: 200 }, bounds, 480), tick);
   }
-  assert.equal(timePlacement(1920, 2880, geometry).left, '80%');
-  assert(Math.abs(parseFloat(timePlacement(1920, 2880, geometry).width) - 10) < 1e-9);
-  assert.equal(positionAtTick(-120, geometry.bars), 0);
-  assert.equal(tickAtPosition(1000, geometry.bars), 3840);
+  assert.deepEqual(timePlacement(1920, 2880, line.bars[1]!), { left: '0%', width: '50%' });
+  assert.equal(barPosition(-120, line.bars[0]!), 0);
+  assert.equal(barPosition(4000, line.bars[1]!), 1);
   assert.equal(tickAtPoint({ x: -100, y: 200 }, bounds, 480), 0);
   assert.equal(tickAtPoint({ x: 2000, y: 200 }, bounds, 480), 3840);
   // Quantization still snaps to sixteenth notes in the compressed bar.
@@ -106,13 +110,17 @@ test('seeking and range placement share the nonuniform playback time mapping', (
   );
 });
 
-test('a note spanning unequal bars remains one continuous segment with proportional time inside each bar', () => {
+test('a note spanning unequal bars has contiguous fragments with proportional time inside each bar', () => {
   const held = { pitch: 48, at: 1440, len: 2400, voice: 3 };
   const line = scoreLines([...dense, ...chord, held], 3840, layout)[0]!;
   const geometry = fixedGeometry(line, [409.6, 102.4]);
-  const placement = notePlacement(held, line, geometry);
-  assert(Math.abs(parseFloat(placement.left!) - 60) < 1e-9);
-  assert(Math.abs(parseFloat(placement.width!) - 40) < 1e-9);
+  const first = notePlacement(held, line, line.bars[0]!);
+  const next = notePlacement(held, line, line.bars[1]!);
+  assert.equal(first.left, '75%');
+  assert.equal(first.width, '25%');
+  assert.equal(next.left, '0%');
+  assert.equal(next.width, '100%');
+  assert.equal(line.bars[0]!.notes.at(-1)!.index, line.bars[1]!.notes.at(-1)!.index);
   assert.equal(line.notes.at(-1)!.note, held);
   for (const bar of geometry.bars) {
     const midpoint = positionAtTick((bar.from + bar.to) / 2, geometry.bars);
@@ -125,9 +133,9 @@ test('a single brief note retains readable length and label space on a narrow sc
   const line = scoreLines([note], 1920, { ...layout, width: 200 })[0]!;
   assert.equal(line.minimum, 448);
   const geometry = fixedGeometry(line, [448]);
-  const placement = notePlacement(note, line, geometry);
+  const placement = notePlacement(note, line, line.bars[0]!);
   assert.equal((parseFloat(placement.width!) / 100) * geometry.width, 28);
-  assert(line.beats.every((beat) => positionAtTick(beat.to, geometry.bars) <= geometry.width));
+  assert(line.bars[0]!.beats.every((beat) => barPosition(beat.to, line.bars[0]!) <= 1));
 });
 
 test('the final held chord keeps its compact width and fractional note times retain exact geometry', () => {
@@ -138,9 +146,9 @@ test('the final held chord keeps its compact width and fractional note times ret
   const note = { pitch: 60, at: 17, len: 83, voice: 1 };
   const line = scoreLines([note], 100, layout)[0]!;
   assert.equal(line.to, 100);
-  assert.equal(line.beats.length, 1);
-  assert.equal(notePlacement(note, line, fixedGeometry(line)).left, '17%');
-  assert(Math.abs(parseFloat(notePlacement(note, line, fixedGeometry(line)).width!) - 83) < 1e-9);
+  assert.equal(line.bars[0]!.beats.length, 1);
+  assert.equal(notePlacement(note, line, line.bars[0]!).left, '17%');
+  assert(Math.abs(parseFloat(notePlacement(note, line, line.bars[0]!).width!) - 83) < 1e-9);
 });
 
 test('resizing preserves all score time, bar boundaries, held-note identity, and pitch folding', () => {
