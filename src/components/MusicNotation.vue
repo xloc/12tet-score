@@ -21,7 +21,6 @@ const props = defineProps<{
 const emit = defineEmits<{ select: [selection: MusicSelection] }>();
 
 const surface = useTemplateRef<HTMLDivElement>('surface');
-const pitchHeader = useTemplateRef<HTMLSpanElement>('pitchHeader');
 const selected = computed(() => new Set(selectedIndices(props.notes, props.selection)));
 
 const beatWidth = 8;
@@ -29,12 +28,7 @@ const beatCount = computed(() => props.totalTicks / props.ppq);
 const beatsPerBar = computed(() => props.ticksPerBar / props.ppq);
 const highestPitch = computed(() => Math.max(...props.notes.map((note) => note.pitch)));
 const lowestPitch = computed(() => Math.min(...props.notes.map((note) => note.pitch)));
-const pitches = computed(() =>
-  Array.from(
-    { length: highestPitch.value - lowestPitch.value + 1 },
-    (_, index) => highestPitch.value - index,
-  ),
-);
+const pitchCount = computed(() => highestPitch.value - lowestPitch.value + 1);
 
 function pointFromEvent(event: PointerEvent): Point {
   const bounds = surface.value!.getBoundingClientRect();
@@ -42,8 +36,7 @@ function pointFromEvent(event: PointerEvent): Point {
 }
 
 function tickAt(point: Point) {
-  const axisWidth = pitchHeader.value!.offsetWidth;
-  const fraction = (point.x - axisWidth) / (surface.value!.offsetWidth - axisWidth);
+  const fraction = point.x / surface.value!.offsetWidth;
   const cell = props.ppq / 4;
   return Math.max(
     0,
@@ -89,7 +82,6 @@ const box = computed(() => (drag.value ? selectionBox(drag.value.start, drag.val
 
 function startSelection(event: PointerEvent) {
   const target = event.target as HTMLElement;
-  if (target.closest('[data-pitch-label]')) return;
   start(event, target.closest('[data-time-header]') ? 'range' : 'box');
 }
 
@@ -117,8 +109,8 @@ function clearSelection() {
       ref="surface"
       class="relative grid w-max touch-pinch-zoom select-none"
       :style="{
-        gridTemplateColumns: `4rem repeat(${beatCount * 4}, ${beatWidth / 4}rem)`,
-        gridTemplateRows: `2rem repeat(${pitches.length}, 1.5rem)`,
+        gridTemplateColumns: `repeat(${beatCount * 4}, ${beatWidth / 4}rem)`,
+        gridTemplateRows: `2rem repeat(${pitchCount}, 1.5rem)`,
       }"
       @pointerdown="startSelection"
       @pointermove="move"
@@ -134,7 +126,7 @@ function clearSelection() {
         class="pointer-events-none border-x border-teal-500 bg-teal-700/5"
         :style="{
           gridRow: '2 / -1',
-          gridColumn: `${2 + selection.from / (ppq / 4)} / ${2 + selection.to / (ppq / 4)}`,
+          gridColumn: `${1 + selection.from / (ppq / 4)} / ${1 + selection.to / (ppq / 4)}`,
         }"
       ></span>
       <span
@@ -145,28 +137,20 @@ function clearSelection() {
           { 'border-l': beat > 1 },
           (beat - 1) % beatsPerBar === 0 ? 'border-slate-200' : 'border-slate-100',
         ]"
-        :style="{ gridRow: '2 / -1', gridColumn: `${2 + (beat - 1) * 4} / span 4` }"
+        :style="{ gridRow: '2 / -1', gridColumn: `${1 + (beat - 1) * 4} / span 4` }"
       ></span>
       <span
-        v-for="(_, index) in pitches"
-        :key="`row-${index}`"
+        v-for="row in pitchCount"
+        :key="`row-${row}`"
         class="pointer-events-none border-b border-slate-100"
-        :style="{ gridRow: index + 2, gridColumn: '2 / -1' }"
+        :style="{ gridRow: row + 1, gridColumn: '1 / -1' }"
       ></span>
-      <span
-        ref="pitchHeader"
-        data-pitch-label
-        class="sticky top-0 left-0 z-30 flex items-center border-r border-b border-slate-200 bg-white px-2 text-xs text-slate-500"
-        :style="{ gridRow: 1, gridColumn: 1 }"
-      >
-        Pitch
-      </span>
       <span
         v-for="beat in beatCount"
         :key="`beat-${beat}`"
         data-time-header
         class="sticky top-0 z-20 flex cursor-crosshair items-center border-b border-slate-200 bg-white px-2 text-xs text-slate-500 tabular-nums"
-        :style="{ gridRow: 1, gridColumn: `${2 + (beat - 1) * 4} / span 4` }"
+        :style="{ gridRow: 1, gridColumn: `${1 + (beat - 1) * 4} / span 4` }"
         title="Drag to select a time range"
       >
         <span v-if="(beat - 1) % beatsPerBar === 0">
@@ -176,15 +160,6 @@ function clearSelection() {
           }}</span>
         </span>
         <span v-else>{{ ((beat - 1) % beatsPerBar) + 1 }}</span>
-      </span>
-      <span
-        v-for="(pitch, index) in pitches"
-        :key="pitch"
-        data-pitch-label
-        class="sticky left-0 z-10 flex items-center border-r border-slate-200 bg-white px-2 text-xs text-slate-500 tabular-nums"
-        :style="{ gridRow: index + 2, gridColumn: 1 }"
-      >
-        {{ pitchLabel(pitch) }}
       </span>
       <button
         v-for="(note, index) in notes"

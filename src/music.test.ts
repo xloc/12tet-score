@@ -64,11 +64,11 @@ test('duration is proportional and semitone geometry survives transposition', ()
   const base = { pitch: 60, at: 0, len: 480, voice: 1 };
   assert.deepEqual(notePlacement(base, 0, ticksPerBar, 72, score.ppq), {
     gridRow: 14,
-    gridColumn: '2 / span 4',
+    gridColumn: '1 / span 4',
   });
   assert.deepEqual(notePlacement({ ...base, len: 960 }, 0, ticksPerBar, 72, score.ppq), {
     gridRow: 14,
-    gridColumn: '2 / span 8',
+    gridColumn: '1 / span 8',
   });
   const third = { ...base, pitch: 64 };
   assert.equal(
@@ -86,7 +86,7 @@ test('a held note crossing the viewing boundary is clipped without changing sour
   const note = { pitch: 60, at: 1800, len: 480, voice: 1 };
   assert.deepEqual(notePlacement(note, 1920, 3840, 72, score.ppq), {
     gridRow: 14,
-    gridColumn: '2 / span 3',
+    gridColumn: '1 / span 3',
   });
   assert.equal(note.len, 480);
 });
@@ -95,6 +95,6 @@ test('notation geometry uses the supplied tick resolution instead of the demo sc
   const note = { pitch: 60, at: 240, len: 240, voice: 1 };
   assert.deepEqual(notePlacement(note, 0, 960, 72, 240), {
     gridRow: 14,
-    gridColumn: '6 / span 4',
+    gridColumn: '5 / span 4',
   });
 });

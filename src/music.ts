@@ -47,6 +47,6 @@ export function notePlacement(
   const end = Math.min(note.at + note.len, to);
   return {
     gridRow: highestPitch - note.pitch + 2,
-    gridColumn: `${2 + (start - from) / cell} / span ${(end - start) / cell}`,
+    gridColumn: `${1 + (start - from) / cell} / span ${(end - start) / cell}`,
   };
 }
