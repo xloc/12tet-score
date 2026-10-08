@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'vite-plus/test';
 import { chordNames } from './chords.ts';
-import { score, ticksPerBar, type Note } from './music.ts';
+import type { Note } from './music.ts';
+import { score, ticksPerBar } from './test/score';
 import {
   boxHits,
   notesSelection,

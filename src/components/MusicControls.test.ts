@@ -1,16 +1,17 @@
-import { expect, test } from 'vite-plus/test';
+import { expect, test, vi } from 'vite-plus/test';
 import { createSSRApp } from 'vue';
 import { renderToString } from 'vue/server-renderer';
 import { createPinia } from 'pinia';
-import { barCount, score, ticksPerBar } from '../music';
+import App from '../App.vue';
 import { selectedIndices, type MusicSelection } from '../selection';
 import { usePlaybackStore } from '../stores/playback';
 import { useScoreStore } from '../stores/score';
+import { createScoreStore, score, ticksPerBar, barCount } from '../test/score';
 import MusicControls from './MusicControls.vue';
 
 async function renderInfo(selection: MusicSelection, bpm = score.bpm) {
   const pinia = createPinia();
-  useScoreStore(pinia).selection = selection;
+  createScoreStore(pinia).selection = selection;
   usePlaybackStore(pinia).bpm = bpm;
   const html = await renderToString(createSSRApp(MusicControls).use(pinia));
   const panel = html.match(/<section\b[^>]*>[\s\S]*?<\/section>/g)![1]!;
@@ -87,7 +88,7 @@ test('switching contexts preserves the same panel elements and layout classes', 
 
 test('settings show the shared pitch-fold threshold', async () => {
   const pinia = createPinia();
-  const sheet = useScoreStore(pinia);
+  const sheet = createScoreStore(pinia);
   expect(sheet.foldThreshold).toBe(12);
   for (let threshold = 0; threshold <= 15; threshold++) {
     sheet.foldThreshold = threshold;
@@ -107,6 +108,7 @@ test('transport switches between Play, Pause, and Resume and always allows going
     ['paused', 480, 'Resume'],
   ] as const) {
     const pinia = createPinia();
+    createScoreStore(pinia);
     const playback = usePlaybackStore(pinia);
     playback.status = status;
     playback.currentTick = tick;
@@ -115,5 +117,64 @@ test('transport switches between Play, Pause, and Resume and always allows going
     expect(primary).not.toMatch(/\sdisabled(?:\s|=|>)/);
     const start = html.match(/<button\b[^>]*title="Go to start"[^>]*>/)![0];
     expect(start).not.toMatch(/\sdisabled(?:\s|=|>)/);
+  }
+});
+
+test('the app renders a loaded score with its own timing and metadata', async () => {
+  const pinia = createPinia();
+  const sheet = createScoreStore(pinia);
+  sheet.load({
+    ...score,
+    title: 'Loaded piece',
+    composer: 'Another composer',
+    ppq: 240,
+    bpm: 90,
+    meter: [3, 4],
+    notes: [{ pitch: 72, at: 720, len: 720, voice: 1 }],
+  });
+  const html = await renderToString(createSSRApp(App).use(pinia));
+  expect(html).toContain('Loaded piece');
+  expect(html).toContain('Another composer');
+  expect(html.match(/data-note-index/g)).toHaveLength(1);
+  expect(html).toContain('90 BPM');
+  expect(html).toContain('3/4');
+  expect(html).toContain('2 measures');
+  expect(html).toContain('max="1440"');
+  expect(html).toContain('/ 6 beats');
+  sheet.selection = { kind: 'notes', indices: [0] };
+  const selected = await renderToString(createSSRApp(MusicControls).use(pinia));
+  expect(selected).toContain('C5');
+  expect(selected).toContain('2 · 1');
+  expect(selected).toContain('3 beats');
+});
+
+test('the app keeps the load dialog available while the initial public score is loading or fails', async () => {
+  const pinia = createPinia();
+  const sheet = useScoreStore(pinia);
+  let ready!: (response: Response) => void;
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(
+      () =>
+        new Promise<Response>((resolve) => {
+          ready = resolve;
+        }),
+    ),
+  );
+  try {
+    const loading = sheet.loadHosted('missing.json');
+    const pending = await renderToString(createSSRApp(App).use(pinia));
+    expect(pending).toContain('Loading score…');
+    expect(pending).not.toContain('data-note-index');
+    expect(pending.match(/<dialog\b/g)).toHaveLength(1);
+    expect(pending).toContain('accept=".json,application/json"');
+    ready(new Response('', { status: 404 }));
+    expect(await loading).toBe(false);
+    const failed = await renderToString(createSSRApp(App).use(pinia));
+    expect(failed).toContain('Could not load score (404).');
+    expect(failed).toContain('Load score');
+    expect(failed).not.toContain('data-note-index');
+  } finally {
+    vi.unstubAllGlobals();
   }
 });

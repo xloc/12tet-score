@@ -1,5 +1,3 @@
-import importedScore from './scores/bwv846-prelude.json' with { type: 'json' };
-
 export type Note = {
   pitch: number;
   at: number;
@@ -20,10 +18,8 @@ export type Score = {
   annotations: { at: number; len: number; kind: string; text: string }[];
 };
 
-export const score: Score = importedScore;
-export const totalTicks = Math.max(...score.notes.map((note) => note.at + note.len));
-export const ticksPerBar = (score.ppq * score.meter[0]! * 4) / score.meter[1]!;
-export const barCount = Math.ceil(totalTicks / ticksPerBar);
+export type ScoreEntry = Pick<Score, 'title' | 'composer'> & { file: string };
+
 export const pitchNames = ['C', 'C♯', 'D', 'D♯', 'E', 'F', 'F♯', 'G', 'G♯', 'A', 'A♯', 'B'];
 
 export function pitchLabel(pitch: number) {
@@ -31,8 +27,8 @@ export function pitchLabel(pitch: number) {
   return `${pitchNames[pitch % 12]}${octave}`;
 }
 
-export function seconds(ticks: number, bpm: number) {
-  return ((ticks / score.ppq) * 60) / bpm;
+export function seconds(ticks: number, bpm: number, ppq: number) {
+  return ((ticks / ppq) * 60) / bpm;
 }
 
 export type PitchRow = number | { from: number; to: number };

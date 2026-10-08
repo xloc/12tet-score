@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed, nextTick, useTemplateRef } from 'vue';
 import { LocateFixed, Pause, Play, Settings, SkipBack } from '@lucide/vue';
+import { storeToRefs } from 'pinia';
 import { chordNames } from '../chords';
-import { barCount, pitchLabel, score, ticksPerBar, totalTicks } from '../music';
+import { pitchLabel } from '../music';
 import { usePlaybackStore } from '../stores/playback';
 import { useScoreStore } from '../stores/score';
 import ControlButton from './ControlButton.vue';
@@ -10,6 +11,7 @@ import InfoPanel from './InfoPanel.vue';
 
 const emit = defineEmits<{ scrollToPlayhead: [] }>();
 const sheet = useScoreStore();
+const { score, ticksPerBar, totalTicks, barCount } = storeToRefs(sheet);
 const playback = usePlaybackStore();
 const settings = useTemplateRef<HTMLDialogElement>('settings');
 const playLabel = computed(() =>
@@ -17,12 +19,13 @@ const playLabel = computed(() =>
 );
 
 function togglePlayback() {
+  if (!score.value) return;
   if (playback.playing) return playback.pause();
   if (playback.paused) return playback.resume();
   return playback.play(
-    score.notes,
-    playback.currentTick < totalTicks ? playback.currentTick : 0,
-    totalTicks,
+    score.value.notes,
+    playback.currentTick < totalTicks.value ? playback.currentTick : 0,
+    totalTicks.value,
   );
 }
 
@@ -39,19 +42,20 @@ const infoSummary = computed(() => {
   return 'Whole piece';
 });
 const position = computed(() =>
-  sheet.span
-    ? `${Math.floor(sheet.span.from / ticksPerBar) + 1} · ${(sheet.span.from % ticksPerBar) / score.ppq + 1}`
+  sheet.span && score.value
+    ? `${Math.floor(sheet.span.from / ticksPerBar.value) + 1} · ${(sheet.span.from % ticksPerBar.value) / score.value.ppq + 1}`
     : '—',
 );
 const possibleChord = computed(() => chordNames(sheet.selectedNotes).join(' / ') || '—');
 const infoFields = computed(() => {
+  if (!score.value) return [];
   const tempo = { label: 'Tempo', value: `${playback.bpm} BPM` };
   const span = sheet.span;
   if (!span) {
     return [
       tempo,
-      { label: 'Meter', value: score.meter.join('/') },
-      { label: 'Length', value: `${barCount} measures` },
+      { label: 'Meter', value: score.value.meter.join('/') },
+      { label: 'Length', value: `${barCount.value} measures` },
     ];
   }
   const singleNote = sheet.selectedNotes.length === 1;
@@ -59,7 +63,7 @@ const infoFields = computed(() => {
     { label: 'Measure · beat', value: position.value },
     {
       label: singleNote && sheet.selection.kind === 'notes' ? 'Duration' : 'Time span',
-      value: `${(span.to - span.from) / score.ppq} beats`,
+      value: `${(span.to - span.from) / score.value.ppq} beats`,
     },
     singleNote ? tempo : { label: 'Possible chord', value: possibleChord.value },
   ];
@@ -68,6 +72,7 @@ const infoFields = computed(() => {
 
 <template>
   <aside
+    v-if="score"
     class="grid max-h-[35dvh] overflow-auto border-t border-slate-200 bg-slate-50 sm:grid-cols-2"
   >
     <InfoPanel class="border-b sm:border-r sm:border-b-0">

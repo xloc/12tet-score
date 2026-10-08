@@ -1,22 +1,13 @@
 import assert from 'node:assert/strict';
 import { test } from 'vite-plus/test';
-import {
-  barCount,
-  notePlacement,
-  pitchLabel,
-  pitchRows,
-  score,
-  scoreLines,
-  seconds,
-  ticksPerBar,
-  totalTicks,
-} from './music.ts';
+import { notePlacement, pitchLabel, pitchRows, scoreLines, seconds } from './music.ts';
+import { score, totalTicks, ticksPerBar, barCount } from './test/score';
 
 test('the complete prelude has 35 measures, 549 notes, and three voices', () => {
   assert.equal(barCount, 35);
   assert.equal(score.notes.length, 549);
   assert.equal(totalTicks, 67200);
-  assert.equal(seconds(totalTicks, score.bpm), 140);
+  assert.equal(seconds(totalTicks, score.bpm, score.ppq), 140);
   for (const voice of score.voices) {
     const notes = score.notes.filter((note) => note.voice === voice.id);
     assert.equal(Math.max(...notes.map((note) => note.at + note.len)), totalTicks);
@@ -26,6 +17,11 @@ test('the complete prelude has 35 measures, 549 notes, and three voices', () => 
       ),
     );
   }
+});
+
+test('seconds uses the supplied tempo and tick resolution', () => {
+  assert.equal(seconds(240, 120, 240), 0.5);
+  assert.equal(seconds(480, 60, 960), 0.5);
 });
 
 test('the opening preserves the held bass and tied middle note beneath the arpeggio', () => {

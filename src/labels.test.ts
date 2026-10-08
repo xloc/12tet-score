@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'vite-plus/test';
 import { placePitchLabels } from './labels';
-import { pitchLabel, score, scoreLines, ticksPerBar, totalTicks } from './music';
+import { pitchLabel, scoreLines } from './music';
 import { boxHits, type Rect } from './selection';
+import { score, ticksPerBar, totalTicks } from './test/score';
 
 function assertClear(
   notes: { bar: Rect; width: number; height: number }[],

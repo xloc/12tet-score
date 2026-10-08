@@ -1,9 +1,8 @@
 <script setup lang="ts">
-import { onBeforeUnmount, useTemplateRef } from 'vue';
+import { onBeforeUnmount, onMounted, useTemplateRef } from 'vue';
 import MusicControls from './components/MusicControls.vue';
 import MusicNotation from './components/MusicNotation.vue';
 import MusicStatusBar from './components/MusicStatusBar.vue';
-import { score, ticksPerBar, totalTicks } from './music';
 import { usePlaybackStore } from './stores/playback';
 import { useScoreStore } from './stores/score';
 
@@ -11,6 +10,9 @@ const sheet = useScoreStore();
 const playback = usePlaybackStore();
 const notation = useTemplateRef<InstanceType<typeof MusicNotation>>('notation');
 
+onMounted(() => {
+  void sheet.initialize();
+});
 onBeforeUnmount(playback.stop);
 </script>
 
@@ -19,11 +21,12 @@ onBeforeUnmount(playback.stop);
     class="grid h-dvh grid-rows-[minmax(0,1fr)_auto_auto] overflow-hidden bg-white text-sm text-slate-900"
   >
     <MusicNotation
+      v-if="sheet.score"
       ref="notation"
-      :notes="score.notes"
-      :total-ticks="totalTicks"
-      :ppq="score.ppq"
-      :ticks-per-bar="ticksPerBar"
+      :notes="sheet.score.notes"
+      :total-ticks="sheet.totalTicks"
+      :ppq="sheet.score.ppq"
+      :ticks-per-bar="sheet.ticksPerBar"
       :fold-threshold="sheet.foldThreshold"
       :playhead="playback.currentTick"
       :playing="playback.playing"
@@ -31,7 +34,12 @@ onBeforeUnmount(playback.stop);
       @select="sheet.selection = $event"
       @seek="playback.seek"
     />
-    <MusicControls @scroll-to-playhead="notation?.scrollToPlayhead()" />
+    <div v-else class="min-h-0 overflow-auto">
+      <p v-if="sheet.loading">Loading score…</p>
+      <p v-else-if="sheet.error">{{ sheet.error }}</p>
+      <p v-else>No score loaded.</p>
+    </div>
+    <MusicControls v-if="sheet.score" @scroll-to-playhead="notation?.scrollToPlayhead()" />
     <MusicStatusBar />
   </main>
 </template>

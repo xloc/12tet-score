@@ -74,6 +74,13 @@ onMounted(() => {
 
 onBeforeUnmount(() => observer?.disconnect());
 
+watch(
+  () => props.notes,
+  () => {
+    cancel();
+    viewport.value?.scrollTo({ top: 0, left: 0 });
+  },
+);
 watch([lines, availableWidth, rem], layoutLabels, { flush: 'post' });
 watch(
   [playheadLine, () => props.playing],
@@ -283,7 +290,7 @@ function clearSelection() {
             }"
           ></span>
           <span
-            v-for="beat in (line.to - line.from) / ppq"
+            v-for="beat in Math.ceil((line.to - line.from) / ppq)"
             :key="`guide-${beat}`"
             class="pointer-events-none relative"
             :class="[
@@ -292,7 +299,7 @@ function clearSelection() {
             ]"
             :style="{
               gridRow: `${band.from} / ${band.to}`,
-              gridColumn: `${1 + (beat - 1) * 4} / span 4`,
+              gridColumn: `${1 + (beat - 1) * 4} / span ${Math.min(4, (line.to - line.from) / (ppq / 4) - (beat - 1) * 4)}`,
             }"
           >
             <span

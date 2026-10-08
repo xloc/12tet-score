@@ -1,8 +1,13 @@
 <script setup lang="ts">
 import { useTemplateRef } from 'vue';
-import { score } from '../music';
+import { storeToRefs } from 'pinia';
+import { useScoreStore } from '../stores/score';
+import ControlButton from './ControlButton.vue';
+import ScoreLoader from './ScoreLoader.vue';
 
+const { score } = storeToRefs(useScoreStore());
 const pieceInfo = useTemplateRef<HTMLDialogElement>('pieceInfo');
+const loader = useTemplateRef<InstanceType<typeof ScoreLoader>>('loader');
 </script>
 
 <template>
@@ -10,6 +15,7 @@ const pieceInfo = useTemplateRef<HTMLDialogElement>('pieceInfo');
     class="flex h-6 min-w-0 items-center border-t border-slate-200 bg-slate-50 text-xs text-slate-600"
   >
     <button
+      v-if="score"
       type="button"
       class="h-full min-w-0 max-w-full cursor-pointer truncate px-2 text-left hover:bg-slate-200 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-teal-700"
       :title="score.title"
@@ -17,9 +23,13 @@ const pieceInfo = useTemplateRef<HTMLDialogElement>('pieceInfo');
     >
       {{ score.title }}
     </button>
+    <ControlButton compact @click="loader?.showModal()">Load score</ControlButton>
   </footer>
 
+  <ScoreLoader ref="loader" />
+
   <dialog
+    v-if="score"
     ref="pieceInfo"
     closedby="any"
     class="m-auto max-h-[calc(100dvh-2rem)] w-96 max-w-[calc(100vw-2rem)] overflow-auto rounded border border-slate-300 bg-white p-4 text-sm text-slate-900 backdrop:bg-slate-900/20"

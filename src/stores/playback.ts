@@ -1,9 +1,11 @@
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { acceptHMRUpdate, defineStore } from 'pinia';
-import { score, seconds, totalTicks, type Note } from '../music.ts';
+import { seconds, type Note } from '../music.ts';
+import { useScoreStore } from './score.ts';
 
 export const usePlaybackStore = defineStore('playback', () => {
-  const bpm = ref(score.bpm);
+  const sheet = useScoreStore();
+  const bpm = ref(sheet.score?.bpm ?? 0);
   const status = ref<'stopped' | 'playing' | 'paused'>('stopped');
   const playing = computed(() => status.value === 'playing');
   const paused = computed(() => status.value === 'paused');
@@ -13,8 +15,18 @@ export const usePlaybackStore = defineStore('playback', () => {
   let session: { notes: Note[]; to: number } | undefined;
   let updateTick = () => {};
 
+  watch(
+    () => sheet.score,
+    () => {
+      stop();
+      bpm.value = sheet.score?.bpm ?? 0;
+    },
+    { flush: 'sync' },
+  );
+
   function stopAudio() {
-    cancelAnimationFrame(frame);
+    if (frame) cancelAnimationFrame(frame);
+    frame = 0;
     const context = audio;
     audio = undefined;
     status.value = 'stopped';
@@ -41,38 +53,42 @@ export const usePlaybackStore = defineStore('playback', () => {
   }
 
   function seek(tick: number) {
+    const score = sheet.score;
+    if (!score) return;
     const wasPlaying = playing.value;
     const wasPaused = paused.value;
     stopAudio();
     session = undefined;
-    currentTick.value = Math.max(0, Math.min(totalTicks, tick));
-    if (currentTick.value === totalTicks) return;
-    if (wasPlaying) return play(score.notes, currentTick.value, totalTicks);
+    currentTick.value = Math.max(0, Math.min(sheet.totalTicks, tick));
+    if (currentTick.value === sheet.totalTicks) return;
+    if (wasPlaying) return play(score.notes, currentTick.value, sheet.totalTicks);
     if (wasPaused) {
-      session = { notes: score.notes, to: totalTicks };
+      session = { notes: score.notes, to: sheet.totalTicks };
       status.value = 'paused';
     }
   }
 
   async function play(notes: Note[], from: number, to: number) {
+    if (!sheet.score) return;
     stopAudio();
     currentTick.value = from;
     session = undefined;
     if (from >= to) return;
     session = { notes, to };
     const tempo = bpm.value;
+    const ppq = sheet.score.ppq;
     const context = new AudioContext();
     audio = context;
     status.value = 'playing';
     await context.resume();
     if (audio !== context) return;
     const origin = context.currentTime + 0.03;
-    const end = origin + seconds(to - from, tempo);
+    const end = origin + seconds(to - from, tempo, ppq);
 
     for (const note of notes) {
       if (note.at >= to || note.at + note.len <= from) continue;
-      const start = origin + seconds(Math.max(note.at, from) - from, tempo);
-      const finish = origin + seconds(Math.min(note.at + note.len, to) - from, tempo);
+      const start = origin + seconds(Math.max(note.at, from) - from, tempo, ppq);
+      const finish = origin + seconds(Math.min(note.at + note.len, to) - from, tempo, ppq);
       const attack = Math.min(0.005, (finish - start) / 2);
       const oscillator = context.createOscillator();
       const gain = context.createGain();
@@ -90,7 +106,7 @@ export const usePlaybackStore = defineStore('playback', () => {
     updateTick = () => {
       currentTick.value = Math.min(
         to,
-        from + ((Math.max(0, context.currentTime - origin) * tempo) / 60) * score.ppq,
+        from + ((Math.max(0, context.currentTime - origin) * tempo) / 60) * ppq,
       );
     };
     function update() {

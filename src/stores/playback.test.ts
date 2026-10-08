@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, expect, test, vi } from 'vite-plus/test';
 import { createPinia } from 'pinia';
-import { score, totalTicks, type Note } from '../music';
+import type { Note } from '../music';
 import { usePlaybackStore } from './playback';
+import { useScoreStore } from './score';
+import { createScoreStore, score } from '../test/score';
 
 class TestGain {
   events: { value: number; time: number }[] = [];
@@ -61,6 +63,7 @@ class TestAudioContext {
 
 const frames = new Map<number, FrameRequestCallback>();
 let playback: ReturnType<typeof usePlaybackStore>;
+let sheet: ReturnType<typeof useScoreStore>;
 beforeEach(() => {
   contexts.length = 0;
   frames.clear();
@@ -71,7 +74,9 @@ beforeEach(() => {
     return frameId;
   });
   vi.stubGlobal('cancelAnimationFrame', (id: number) => frames.delete(id));
-  playback = usePlaybackStore(createPinia());
+  const pinia = createPinia();
+  sheet = createScoreStore(pinia);
+  playback = usePlaybackStore(pinia);
 });
 afterEach(() => {
   playback.stop();
@@ -162,7 +167,7 @@ test('seeking during playback replaces the old schedule and continues the piece 
   expect(playback.currentTick).toBe(480);
   const context = contexts[1]!;
   expect(context.oscillators).toHaveLength(
-    score.notes.filter((note) => note.at + note.len > 480).length,
+    sheet.score!.notes.filter((note) => note.at + note.len > 480).length,
   );
   for (const oscillator of context.oscillators) {
     expect(oscillator.starts[0]).toBeGreaterThanOrEqual(0.03);
@@ -198,8 +203,8 @@ test('seeking while stopped is silent and clamps the playhead to the piece bound
   await playback.seek(-120);
   expect(playback.currentTick).toBe(0);
   expect(playback.status).toBe('stopped');
-  await playback.seek(totalTicks + 120);
-  expect(playback.currentTick).toBe(totalTicks);
+  await playback.seek(sheet.totalTicks + 120);
+  expect(playback.currentTick).toBe(sheet.totalTicks);
 });
 
 test('pausing during audio startup prevents a stale resume from scheduling notes', async () => {
@@ -231,4 +236,60 @@ test('resuming near a note end keeps short gain envelopes within the sounding in
   expect(times).toEqual([...times].sort((a, b) => a - b));
   expect(times[0]).toBeGreaterThanOrEqual(oscillator.starts[0]!);
   expect(times.at(-1)).toBeLessThanOrEqual(oscillator.finishes[0]!);
+});
+
+test('loading another score resets active and paused playback and uses the new timing', async () => {
+  for (const paused of [false, true]) {
+    await playback.play([held], 0, 1920);
+    const previous = contexts.at(-1)!;
+    advance(previous, 0.53);
+    if (paused) playback.pause();
+    sheet.selection = { kind: 'notes', indices: [0] };
+    sheet.load({
+      ...score,
+      ppq: 240,
+      bpm: 120,
+      meter: [3, 4],
+      notes: [{ pitch: 72, at: 0, len: 720, voice: 1 }],
+    });
+    expect(playback.status).toBe('stopped');
+    expect(playback.currentTick).toBe(0);
+    expect(playback.bpm).toBe(120);
+    expect(previous.closes).toBe(1);
+    expect(frames.size).toBe(0);
+    expect(sheet.selectedNotes).toEqual([]);
+    const count = contexts.length;
+    await playback.resume();
+    expect(contexts).toHaveLength(count);
+    await playback.play(sheet.score!.notes, 0, sheet.totalTicks);
+    const context = contexts.at(-1)!;
+    expect(context.oscillators).toHaveLength(1);
+    expect(context.oscillators[0]!.frequency.value).toBeCloseTo(523.251);
+    expect(context.oscillators[0]!.finishes[0]).toBeCloseTo(1.53);
+    advance(context, 0.53);
+    expect(playback.currentTick).toBeCloseTo(240);
+    await playback.seek(5000);
+    expect(playback.currentTick).toBe(720);
+    expect(playback.status).toBe('stopped');
+  }
+});
+
+test('loading a score during audio startup prevents the old piece from being scheduled', async () => {
+  let ready!: () => void;
+  vi.spyOn(TestAudioContext.prototype, 'resume').mockImplementationOnce(
+    () =>
+      new Promise<void>((resolve) => {
+        ready = resolve;
+      }),
+  );
+  const starting = playback.play([held], 0, 1920);
+  sheet.load({ ...score, bpm: 90, notes: [{ ...held, pitch: 72, len: 480 }] });
+  ready();
+  await starting;
+  expect(playback.status).toBe('stopped');
+  expect(playback.currentTick).toBe(0);
+  expect(playback.bpm).toBe(90);
+  expect(contexts[0]!.closes).toBe(1);
+  expect(contexts[0]!.oscillators).toHaveLength(0);
+  expect(frames.size).toBe(0);
 });

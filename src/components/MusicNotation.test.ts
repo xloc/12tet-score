@@ -142,3 +142,22 @@ test('one playhead follows wrapped lines and reaches the shorter final line end'
     expect(marker).toContain(`left:min(${percent}%, calc(100% - 1px))`);
   }
 });
+
+test('a score ending partway through a beat keeps its guide within the final line', async () => {
+  const html = await renderToString(
+    createSSRApp(MusicNotation, {
+      notes: [{ pitch: 60, at: 0, len: 120, voice: 1 }],
+      totalTicks: 120,
+      ppq: 480,
+      ticksPerBar: 1920,
+      foldThreshold: 0,
+      playhead: 0,
+      playing: false,
+      selection: { kind: 'notes', indices: [] },
+    }),
+  );
+  expect(html.match(/data-time-label/g)).toHaveLength(1);
+  expect(html).toContain('grid-template-columns:repeat(1, minmax(0, 1fr))');
+  expect(html).toContain('grid-column:1 / span 1');
+  expect(html).not.toContain('grid-column:1 / span 4');
+});
