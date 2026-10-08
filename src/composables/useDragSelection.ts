@@ -11,6 +11,7 @@ export type SelectionDrag = {
 export function useDragSelection(
   pointFromEvent: (event: PointerEvent) => Point,
   select: (drag: SelectionDrag) => void,
+  seek: (event: PointerEvent) => void,
 ) {
   const gesture = ref<SelectionDrag | null>(null);
   const drag = computed(() => {
@@ -25,12 +26,18 @@ export function useDragSelection(
   function start(event: PointerEvent) {
     if (event.button !== 0 || !event.isPrimary || pointer) return;
     ignoreClick = false;
+    if (event.metaKey) {
+      event.preventDefault();
+      ignoreClick = true;
+      seek(event);
+      return;
+    }
     const point = pointFromEvent(event);
     gesture.value = {
       start: point,
       end: point,
       scope: event.altKey ? 'range' : 'box',
-      additive: event.ctrlKey || event.metaKey || event.shiftKey,
+      additive: event.ctrlKey || event.shiftKey,
     };
     // Preserve the original tap target when a note is inside the gesture surface.
     const target = event.target as Element;

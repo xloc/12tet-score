@@ -98,3 +98,22 @@ test('settings show the shared pitch-fold threshold', async () => {
     expect(output!.trim()).toBe(threshold === 0 ? '0 (off)' : `${threshold} unused pitches`);
   }
 });
+
+test('transport switches between Play, Pause, and Resume and always allows going to the start', async () => {
+  for (const [status, tick, label] of [
+    ['stopped', 0, 'Play'],
+    ['stopped', 480, 'Play'],
+    ['playing', 480, 'Pause'],
+    ['paused', 480, 'Resume'],
+  ] as const) {
+    const pinia = createPinia();
+    const playback = usePlaybackStore(pinia);
+    playback.status = status;
+    playback.currentTick = tick;
+    const html = await renderToString(createSSRApp(MusicControls).use(pinia));
+    const primary = html.match(new RegExp(`<button\\b[^>]*title="${label}"[^>]*>`))![0];
+    expect(primary).not.toMatch(/\sdisabled(?:\s|=|>)/);
+    const start = html.match(/<button\b[^>]*title="Go to start"[^>]*>/)![0];
+    expect(start).not.toMatch(/\sdisabled(?:\s|=|>)/);
+  }
+});

@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, useTemplateRef } from 'vue';
-import { Play, Settings, Square } from '@lucide/vue';
+import { computed, nextTick, useTemplateRef } from 'vue';
+import { LocateFixed, Pause, Play, Settings, SkipBack } from '@lucide/vue';
 import { chordNames } from '../chords';
 import { barCount, pitchLabel, score, ticksPerBar, totalTicks } from '../music';
 import { usePlaybackStore } from '../stores/playback';
@@ -8,9 +8,30 @@ import { useScoreStore } from '../stores/score';
 import ControlButton from './ControlButton.vue';
 import InfoPanel from './InfoPanel.vue';
 
+const emit = defineEmits<{ scrollToPlayhead: [] }>();
 const sheet = useScoreStore();
 const playback = usePlaybackStore();
 const settings = useTemplateRef<HTMLDialogElement>('settings');
+const playLabel = computed(() =>
+  playback.playing ? 'Pause' : playback.paused ? 'Resume' : 'Play',
+);
+
+function togglePlayback() {
+  if (playback.playing) return playback.pause();
+  if (playback.paused) return playback.resume();
+  return playback.play(
+    score.notes,
+    playback.currentTick < totalTicks ? playback.currentTick : 0,
+    totalTicks,
+  );
+}
+
+async function goToStart() {
+  await playback.seek(0);
+  await nextTick();
+  emit('scrollToPlayhead');
+}
+
 const infoSummary = computed(() => {
   if (sheet.selectedNotes.length === 1) return pitchLabel(sheet.selectedNotes[0]!.pitch);
   if (sheet.selectedNotes.length || sheet.selection.kind === 'range')
@@ -51,19 +72,18 @@ const infoFields = computed(() => {
   >
     <InfoPanel class="border-b sm:border-r sm:border-b-0">
       <div class="flex items-center gap-2">
-        <ControlButton
-          primary
-          icon-only
-          title="Play"
-          :disabled="playback.playing"
-          @click="playback.play(score.notes, 0, totalTicks)"
-        >
-          <Play :size="16" />
-          <span class="sr-only">Play</span>
+        <ControlButton primary icon-only :title="playLabel" @click="togglePlayback">
+          <Pause v-if="playback.playing" :size="16" />
+          <Play v-else :size="16" />
+          <span class="sr-only">{{ playLabel }}</span>
         </ControlButton>
-        <ControlButton icon-only title="Stop" :disabled="!playback.playing" @click="playback.stop">
-          <Square :size="16" />
-          <span class="sr-only">Stop</span>
+        <ControlButton icon-only title="Go to start" @click="goToStart">
+          <SkipBack :size="16" />
+          <span class="sr-only">Go to start</span>
+        </ControlButton>
+        <ControlButton icon-only title="Scroll to playhead" @click="emit('scrollToPlayhead')">
+          <LocateFixed :size="16" />
+          <span class="sr-only">Scroll to playhead</span>
         </ControlButton>
         <ControlButton
           icon-only

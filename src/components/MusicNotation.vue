@@ -27,9 +27,11 @@ const props = defineProps<{
   ppq: number;
   ticksPerBar: number;
   foldThreshold: number;
+  playhead: number;
+  playing: boolean;
   selection: MusicSelection;
 }>();
-const emit = defineEmits<{ select: [selection: MusicSelection] }>();
+const emit = defineEmits<{ select: [selection: MusicSelection]; seek: [tick: number] }>();
 
 const viewport = useTemplateRef<HTMLDivElement>('viewport');
 const surface = useTemplateRef<HTMLDivElement>('surface');
@@ -51,6 +53,11 @@ const lines = computed(() =>
     props.foldThreshold,
   ),
 );
+const playheadLine = computed(
+  () =>
+    lines.value.find((line) => props.playhead >= line.from && props.playhead < line.to) ??
+    lines.value.at(-1),
+);
 const labelLayouts = ref<
   Record<number, Record<number, { label: CSSProperties; connector: CSSProperties }>>
 >({});
@@ -68,6 +75,23 @@ onMounted(() => {
 onBeforeUnmount(() => observer?.disconnect());
 
 watch([lines, availableWidth, rem], layoutLabels, { flush: 'post' });
+watch(
+  [playheadLine, () => props.playing],
+  () => {
+    if (props.playing) {
+      scrollToPlayhead();
+    }
+  },
+  { flush: 'post' },
+);
+
+function scrollToPlayhead() {
+  surface.value
+    ?.querySelector<HTMLElement>('[data-playhead]')
+    ?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+}
+
+defineExpose({ scrollToPlayhead });
 
 function layoutLabels() {
   const layouts: typeof labelLayouts.value = {};
@@ -146,6 +170,15 @@ function tickAt(point: Point) {
   return tickAtPoint(point, bounds, props.ppq);
 }
 
+function movePlayhead(event: PointerEvent) {
+  const point = pointFromEvent(event);
+  const line = (event.target as Element).closest<HTMLElement>('[data-score-line]');
+  if (line) {
+    point.y = line.getBoundingClientRect().top - surface.value!.getBoundingClientRect().top;
+  }
+  emit('seek', tickAt(point));
+}
+
 function commitDrag(drag: SelectionDrag) {
   if (drag.scope === 'range') {
     const start = tickAt(drag.start);
@@ -180,6 +213,7 @@ function commitDrag(drag: SelectionDrag) {
 const { drag, start, move, end, cancel, suppressClick } = useDragSelection(
   pointFromEvent,
   commitDrag,
+  movePlayhead,
 );
 const box = computed(() =>
   drag.value?.scope === 'box' ? selectionBox(drag.value.start, drag.value.end) : null,
@@ -195,10 +229,7 @@ const range = computed(() => {
 
 function selectNote(index: number, event: MouseEvent) {
   const toggle =
-    event.ctrlKey ||
-    event.metaKey ||
-    event.shiftKey ||
-    ('pointerType' in event && event.pointerType === 'touch');
+    event.ctrlKey || event.shiftKey || ('pointerType' in event && event.pointerType === 'touch');
   emit(
     'select',
     notesSelection(props.notes, props.selection, [index], toggle ? 'toggle' : 'replace'),
@@ -216,7 +247,7 @@ function clearSelection() {
     <div
       ref="surface"
       class="relative grid w-full touch-pan-y touch-pinch-zoom gap-y-12 py-4 select-none"
-      title="Drag to select notes; Alt/Option-drag to select a time range"
+      title="Command-click to move the playhead; drag to select notes; Alt/Option-drag to select a time range"
       @pointerdown="start"
       @pointermove="move"
       @pointerup="end"
@@ -290,6 +321,14 @@ function clearSelection() {
             :style="{ gridRow: index + 1, gridColumn: '1 / -1' }"
           ></span>
         </template>
+        <span
+          v-if="line === playheadLine"
+          data-playhead
+          class="pointer-events-none absolute inset-y-0 z-20 w-px bg-teal-600"
+          :style="{
+            left: `min(${((playhead - line.from) / (line.to - line.from)) * 100}%, calc(100% - 1px))`,
+          }"
+        ></span>
         <button
           v-for="{ note, index } in line.notes"
           :key="index"

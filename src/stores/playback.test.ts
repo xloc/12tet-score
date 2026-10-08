@@ -1,0 +1,234 @@
+import { afterEach, beforeEach, expect, test, vi } from 'vite-plus/test';
+import { createPinia } from 'pinia';
+import { score, totalTicks, type Note } from '../music';
+import { usePlaybackStore } from './playback';
+
+class TestGain {
+  events: { value: number; time: number }[] = [];
+  gain = {
+    setValueAtTime: (value: number, time: number) => this.events.push({ value, time }),
+    linearRampToValueAtTime: (value: number, time: number) => this.events.push({ value, time }),
+  };
+  connect() {
+    return this;
+  }
+}
+
+class TestOscillator {
+  type = '';
+  frequency = { value: 0 };
+  starts: number[] = [];
+  finishes: number[] = [];
+  connect(gain: TestGain) {
+    return gain;
+  }
+  start(time: number) {
+    this.starts.push(time);
+  }
+  stop(time: number) {
+    this.finishes.push(time);
+  }
+}
+
+const contexts: TestAudioContext[] = [];
+class TestAudioContext {
+  currentTime = 0;
+  destination = {};
+  oscillators: TestOscillator[] = [];
+  gains: TestGain[] = [];
+  closes = 0;
+  constructor() {
+    contexts.push(this);
+  }
+  resume() {
+    return Promise.resolve();
+  }
+  close() {
+    this.closes++;
+    return Promise.resolve();
+  }
+  createOscillator() {
+    const oscillator = new TestOscillator();
+    this.oscillators.push(oscillator);
+    return oscillator;
+  }
+  createGain() {
+    const gain = new TestGain();
+    this.gains.push(gain);
+    return gain;
+  }
+}
+
+const frames = new Map<number, FrameRequestCallback>();
+let playback: ReturnType<typeof usePlaybackStore>;
+beforeEach(() => {
+  contexts.length = 0;
+  frames.clear();
+  let frameId = 0;
+  vi.stubGlobal('AudioContext', TestAudioContext);
+  vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+    frames.set(++frameId, callback);
+    return frameId;
+  });
+  vi.stubGlobal('cancelAnimationFrame', (id: number) => frames.delete(id));
+  playback = usePlaybackStore(createPinia());
+});
+afterEach(() => {
+  playback.stop();
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+});
+
+function advance(context: TestAudioContext, time: number) {
+  context.currentTime = time;
+  const callbacks = [...frames.values()];
+  frames.clear();
+  for (const callback of callbacks) callback(time * 1000);
+}
+
+const held: Note = { pitch: 60, at: 0, len: 1920, voice: 1 };
+
+test('playback from a moved playhead clips held notes and excludes notes outside the interval', async () => {
+  await playback.play(
+    [
+      { pitch: 60, at: 0, len: 480, voice: 1 },
+      { pitch: 64, at: 0, len: 960, voice: 2 },
+      { pitch: 67, at: 720, len: 480, voice: 3 },
+      { pitch: 72, at: 1440, len: 480, voice: 1 },
+    ],
+    480,
+    1440,
+  );
+  const context = contexts[0]!;
+  expect(playback.playing).toBe(true);
+  expect(playback.currentTick).toBe(480);
+  expect(context.oscillators).toHaveLength(2);
+  expect(context.oscillators[0]!.starts[0]).toBeCloseTo(0.03);
+  expect(context.oscillators[0]!.finishes[0]).toBeCloseTo(1.03);
+  expect(context.oscillators[1]!.starts[0]).toBeCloseTo(0.53);
+  expect(context.oscillators[1]!.finishes[0]).toBeCloseTo(1.53);
+  advance(context, 0.78);
+  expect(playback.currentTick).toBeCloseTo(840);
+});
+
+test('pause reads the audio clock exactly and resume continues held notes at the chosen tempo', async () => {
+  await playback.play([held], 0, 1920);
+  contexts[0]!.currentTime = 0.655;
+  playback.pause();
+  expect(playback.currentTick).toBeCloseTo(300);
+  expect(playback.paused).toBe(true);
+  expect(playback.playing).toBe(false);
+  expect(contexts[0]!.closes).toBe(1);
+  expect(frames.size).toBe(0);
+  playback.bpm = 120;
+  await playback.resume();
+  const resumed = contexts[1]!;
+  expect(playback.currentTick).toBeCloseTo(300);
+  expect(playback.playing).toBe(true);
+  expect(resumed.oscillators).toHaveLength(1);
+  expect(resumed.oscillators[0]!.starts[0]).toBeCloseTo(0.03);
+  expect(resumed.oscillators[0]!.finishes[0]).toBeCloseTo(1.7175);
+  advance(resumed, 0.53);
+  expect(playback.currentTick).toBeCloseTo(780);
+  expect(held.len).toBe(1920);
+});
+
+test('stop clears paused playback and resets the playhead to the beginning', async () => {
+  await playback.play([held], 0, 1920);
+  contexts[0]!.currentTime = 0.53;
+  playback.pause();
+  playback.stop();
+  expect(playback.currentTick).toBe(0);
+  expect(playback.status).toBe('stopped');
+  await playback.resume();
+  expect(contexts).toHaveLength(1);
+});
+
+test('natural completion leaves the playhead at the end and releases audio', async () => {
+  await playback.play([held], 0, 1920);
+  advance(contexts[0]!, 4.1);
+  expect(playback.currentTick).toBe(1920);
+  expect(playback.status).toBe('stopped');
+  expect(contexts[0]!.closes).toBe(1);
+  expect(frames.size).toBe(0);
+});
+
+test('seeking during playback replaces the old schedule and continues the piece from the new position', async () => {
+  await playback.play([held], 0, 1920);
+  await playback.seek(480);
+  expect(contexts[0]!.closes).toBe(1);
+  expect(contexts).toHaveLength(2);
+  expect(playback.playing).toBe(true);
+  expect(playback.currentTick).toBe(480);
+  const context = contexts[1]!;
+  expect(context.oscillators).toHaveLength(
+    score.notes.filter((note) => note.at + note.len > 480).length,
+  );
+  for (const oscillator of context.oscillators) {
+    expect(oscillator.starts[0]).toBeGreaterThanOrEqual(0.03);
+    expect(oscillator.finishes[0]).toBeGreaterThan(oscillator.starts[0]!);
+  }
+  await playback.seek(0);
+  expect(playback.currentTick).toBe(0);
+  expect(playback.playing).toBe(true);
+});
+
+test('seeking while paused preserves pause and resumes from the new position', async () => {
+  await playback.play([held], 0, 1920);
+  playback.pause();
+  await playback.seek(1920);
+  expect(playback.currentTick).toBe(1920);
+  expect(playback.paused).toBe(true);
+  expect(contexts).toHaveLength(1);
+  await playback.seek(0);
+  expect(playback.currentTick).toBe(0);
+  expect(playback.paused).toBe(true);
+  expect(contexts).toHaveLength(1);
+  await playback.resume();
+  expect(playback.currentTick).toBe(0);
+  expect(playback.playing).toBe(true);
+  expect(contexts).toHaveLength(2);
+});
+
+test('seeking while stopped is silent and clamps the playhead to the piece bounds', async () => {
+  await playback.seek(960);
+  expect(playback.currentTick).toBe(960);
+  expect(playback.status).toBe('stopped');
+  expect(contexts).toHaveLength(0);
+  await playback.seek(-120);
+  expect(playback.currentTick).toBe(0);
+  expect(playback.status).toBe('stopped');
+  await playback.seek(totalTicks + 120);
+  expect(playback.currentTick).toBe(totalTicks);
+});
+
+test('pausing during audio startup prevents a stale resume from scheduling notes', async () => {
+  let ready!: () => void;
+  vi.spyOn(TestAudioContext.prototype, 'resume').mockImplementationOnce(
+    () =>
+      new Promise<void>((resolve) => {
+        ready = resolve;
+      }),
+  );
+  const starting = playback.play([held], 0, 1920);
+  playback.pause();
+  ready();
+  await starting;
+  expect(playback.paused).toBe(true);
+  expect(contexts[0]!.oscillators).toHaveLength(0);
+  expect(frames.size).toBe(0);
+});
+
+test('resuming near a note end keeps short gain envelopes within the sounding interval', async () => {
+  const note = { ...held, len: 480 };
+  await playback.play([note], 0, 480);
+  contexts[0]!.currentTime = 1.028;
+  playback.pause();
+  await playback.resume();
+  const context = contexts[1]!;
+  const oscillator = context.oscillators[0]!;
+  const times = context.gains[0]!.events.map((event) => event.time);
+  expect(times).toEqual([...times].sort((a, b) => a - b));
+  expect(times[0]).toBeGreaterThanOrEqual(oscillator.starts[0]!);
+  expect(times.at(-1)).toBeLessThanOrEqual(oscillator.finishes[0]!);
+});

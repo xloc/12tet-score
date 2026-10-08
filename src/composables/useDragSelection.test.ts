@@ -10,9 +10,11 @@ function fixture(pointerType: string = 'mouse') {
     releasePointerCapture: (id: number) => captured.delete(id),
   };
   const committed: SelectionDrag[] = [];
+  const seeks: { x: number; y: number }[] = [];
   const selection = useDragSelection(
     (event) => ({ x: event.clientX, y: event.clientY }),
     (drag) => committed.push(drag),
+    (event) => seeks.push({ x: event.clientX, y: event.clientY }),
   );
   function event(x: number, y: number, overrides: Partial<PointerEvent> = {}) {
     return {
@@ -28,10 +30,11 @@ function fixture(pointerType: string = 'mouse') {
       altKey: false,
       target,
       currentTarget: {},
+      preventDefault: () => {},
       ...overrides,
     } as unknown as PointerEvent;
   }
-  return { ...selection, event, committed, captured, target };
+  return { ...selection, event, committed, seeks, captured, target };
 }
 
 test('taps capture the original note target and do not turn into box selections', () => {
@@ -67,20 +70,45 @@ for (const pointerType of ['mouse', 'touch', 'pen']) {
 
 test('holding Alt starts a time range and preserves additive selection modifiers', () => {
   const selection = fixture();
-  selection.start(selection.event(20, 20, { altKey: true, metaKey: true }));
+  selection.start(selection.event(20, 20, { altKey: true, ctrlKey: true }));
   selection.end(selection.event(60, 20));
   assert.equal(selection.committed[0]?.scope, 'range');
   assert.equal(selection.committed[0]?.additive, true);
 });
 
-test('Ctrl, Command, and Shift keep normal drags as additive note selections', () => {
-  for (const modifiers of [{ ctrlKey: true }, { metaKey: true }, { shiftKey: true }]) {
+test('Ctrl and Shift keep normal drags as additive note selections', () => {
+  for (const modifiers of [{ ctrlKey: true }, { shiftKey: true }]) {
     const selection = fixture();
     selection.start(selection.event(20, 20, modifiers));
     selection.end(selection.event(60, 60));
     assert.equal(selection.committed[0]?.scope, 'box');
     assert.equal(selection.committed[0]?.additive, true);
   }
+});
+
+test('Command-click seeks without capturing a pointer or changing the selection', () => {
+  const selection = fixture();
+  selection.start(selection.event(40, 80, { metaKey: true }));
+  selection.end(selection.event(40, 80));
+  assert.deepEqual(selection.seeks, [{ x: 40, y: 80 }]);
+  assert.equal(selection.captured.size, 0);
+  assert.equal(selection.committed.length, 0);
+  assert.equal(selection.drag.value, null);
+  let prevented = false;
+  let stopped = false;
+  selection.suppressClick({
+    detail: 1,
+    preventDefault: () => {
+      prevented = true;
+    },
+    stopPropagation: () => {
+      stopped = true;
+    },
+  } as unknown as MouseEvent);
+  assert(prevented && stopped);
+  selection.start(selection.event(20, 20));
+  selection.end(selection.event(60, 60));
+  assert.equal(selection.committed.length, 1);
 });
 
 test('a canceled touch or lost pointer capture never commits selection', () => {

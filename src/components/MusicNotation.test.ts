@@ -16,6 +16,8 @@ test('wrapped notation shows both segments of a held note with the same selectio
       ppq: 480,
       ticksPerBar: 1920,
       foldThreshold: 0,
+      playhead: 0,
+      playing: false,
       selection: { kind: 'notes', indices: [0] },
     }),
   );
@@ -51,6 +53,8 @@ test('a time range crossing a line break highlights each line within its own bou
       ppq: 480,
       ticksPerBar: 1920,
       foldThreshold: 0,
+      playhead: 0,
+      playing: false,
       selection: { kind: 'range', from: 1440, to: 2400 },
     }),
   );
@@ -72,6 +76,8 @@ test('folded notation leaves blank pitch gaps and retains note timing, labels, a
         ppq: 480,
         ticksPerBar: 1920,
         foldThreshold,
+        playhead: 0,
+        playing: false,
         selection: { kind: 'notes', indices: [0] },
       }),
     );
@@ -103,5 +109,36 @@ test('folded notation leaves blank pitch gaps and retains note timing, labels, a
     } else {
       expect(html).not.toContain('data-pitch-fold');
     }
+  }
+});
+
+test('one playhead follows wrapped lines and reaches the shorter final line end', async () => {
+  for (const [playhead, lineIndex, percent] of [
+    [0, 0, 0],
+    [960, 0, 50],
+    [1920, 1, 0],
+    [2160, 1, 50],
+    [2400, 1, 100],
+  ] as const) {
+    const html = await renderToString(
+      createSSRApp(MusicNotation, {
+        notes: [
+          { pitch: 60, at: 0, len: 1920, voice: 1 },
+          { pitch: 72, at: 1920, len: 480, voice: 1 },
+        ],
+        totalTicks: 2400,
+        ppq: 480,
+        ticksPerBar: 1920,
+        foldThreshold: 0,
+        playhead,
+        playing: false,
+        selection: { kind: 'notes', indices: [] },
+      }),
+    );
+    const lines = html.match(/<div\b[^>]*data-score-line[^>]*>[\s\S]*?<\/div>/g)!;
+    expect(html.match(/data-playhead/g)).toHaveLength(1);
+    expect(lines[lineIndex]).toContain('data-playhead');
+    const marker = lines[lineIndex]!.match(/<span\b[^>]*data-playhead[^>]*>/)![0];
+    expect(marker).toContain(`left:min(${percent}%, calc(100% - 1px))`);
   }
 });
