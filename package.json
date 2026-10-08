@@ -1,0 +1,34 @@
+{
+  "name": "music-sheet",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vp dev",
+    "build": "vue-tsc --noEmit && vp build",
+    "preview": "vp preview",
+    "check": "vp check && vue-tsc --noEmit",
+    "typecheck": "vue-tsc --noEmit",
+    "lint": "vp lint",
+    "fmt": "vp fmt",
+    "test": "vp test"
+  },
+  "dependencies": {
+    "@lucide/vue": "^1.52.0",
+    "pinia": "^3.0.0",
+    "vue": "^3.5.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/node": "^24.0.0",
+    "@vitejs/plugin-vue": "^6.0.0",
+    "tailwindcss": "^4.3.3",
+    "typescript": "~5.9.3",
+    "vite-plus": "1.0.0",
+    "vue-tsc": "^3.1.0"
+  },
+  "engines": {
+    "node": "^22.18.0 || ^24.11.0 || >=26.0.0"
+  },
+  "packageManager": "pnpm@11.21.0"
+}
