@@ -75,6 +75,7 @@ test('MIDI access is requested explicitly without SysEx, and duplicate requests 
   expect(midi.inputs.usb).toEqual({
     name: usb.name,
     state: 'connected',
+    transport: 'midi',
     pressed: {},
   });
   expect(midi.inputs.ble?.name).toBe(ble.name);

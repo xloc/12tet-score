@@ -147,5 +147,6 @@ test('chord detection supports extensions and converts sharp MIDI pitches', () =
 test('empty, incomplete, and mixed pitch sets do not receive a forced chord name', () => {
   assert.deepEqual(chordNames([]), []);
   assert.deepEqual(chordNames(notes.slice(0, 2)), []);
+  assert.deepEqual(chordNames([60, 67, 69].map((pitch) => ({ pitch }))), []);
   assert.deepEqual(chordNames(score.notes), []);
 });

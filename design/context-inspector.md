@@ -34,7 +34,14 @@ The inspector explains the current score or selection in a compact panel.
 - Use a grouped form hierarchy in Settings: a light gray dialog background,
   white rounded groups, and small secondary section titles above the groups.
   Align option names to the left and values and controls to the right. Use
-  inset separators within groups and keep help beside its related option.
+  inset separators within groups. Keep option-specific help directly below its
+  control in smaller secondary text. Place MIDI connection explanations below
+  the white group as a section footer, aligned with the option labels. Use
+  regular 12px system text and the dialog's secondary text color so guidance
+  stays distinct from actionable rows. This adapts Apple's
+  [label hierarchy](https://developer.apple.com/design/human-interface-guidelines/labels)
+  and [section footers](https://developer.apple.com/documentation/uikit/adding-headers-and-footers-to-table-sections)
+  to the web dialog.
 - Include device names, connection states, and the complete pressed-pitch list
   in Settings. Connect and disconnect controls live here. Opening the dialog
   does not request MIDI permission.

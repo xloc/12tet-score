@@ -15,8 +15,21 @@ const keys = computed(() => midi.pressedPitches.map(pitchLabel).join(' · '));
 const status = computed(() => {
   if (midi.connecting) return 'Connecting…';
   if (!midi.ready) return 'Not connected';
-  return midi.connectedCount ? 'Connected' : 'No device';
+  return Object.values(midi.inputs).some(
+    (input) => input.transport === 'midi' && input.state === 'connected',
+  )
+    ? 'Connected'
+    : 'No device';
 });
+const midiHelp = computed(() =>
+  [
+    midi.unavailable || midi.error,
+    midi.bluetoothUnavailable || midi.bluetoothError || midi.bluetoothRestoreUnavailable,
+    midi.ready && !Object.keys(midi.inputs).length
+      ? 'Connect a keyboard through your system, or use Bluetooth MIDI above.'
+      : '',
+  ].filter(Boolean),
+);
 
 defineExpose({
   showModal() {
@@ -91,7 +104,7 @@ defineExpose({
         <div class="divide-y divide-slate-100 rounded-xl bg-white px-3">
           <div class="space-y-2 py-3">
             <div class="flex items-center justify-between gap-3">
-              <span>Connection</span>
+              <span>System MIDI</span>
               <div class="flex items-center gap-2">
                 <span class="text-slate-500">{{
                   midi.unavailable ? 'Unavailable' : midi.error ? 'Error' : status
@@ -110,9 +123,30 @@ defineExpose({
                 </ControlButton>
               </div>
             </div>
-            <p v-if="midi.unavailable || midi.error" class="text-xs text-slate-500">
-              {{ midi.unavailable || midi.error }}
-            </p>
+          </div>
+          <div class="py-3">
+            <div class="flex items-center justify-between gap-3">
+              <span>Bluetooth MIDI</span>
+              <ControlButton
+                v-if="!midi.bluetoothUnavailable"
+                compact
+                type="button"
+                :title="
+                  midi.bluetoothReady ? 'Disconnect Bluetooth MIDI' : 'Connect Bluetooth MIDI'
+                "
+                :disabled="midi.bluetoothConnecting"
+                @click="midi.bluetoothReady ? midi.disconnectBluetooth() : midi.connectBluetooth()"
+              >
+                {{
+                  midi.bluetoothConnecting
+                    ? 'Connecting…'
+                    : midi.bluetoothReady
+                      ? 'Disconnect'
+                      : 'Connect'
+                }}
+              </ControlButton>
+              <span v-else class="text-slate-500">Unavailable</span>
+            </div>
           </div>
           <ul v-if="Object.keys(midi.inputs).length" class="divide-y divide-slate-100">
             <li
@@ -126,13 +160,16 @@ defineExpose({
               }}</span>
             </li>
           </ul>
-          <p v-else-if="midi.ready" class="py-3 text-xs text-slate-500">
-            Connect a USB or Bluetooth MIDI keyboard to your computer to see it here.
-          </p>
           <dl v-if="midi.connectedCount" class="flex items-baseline justify-between gap-3 py-3">
             <dt class="shrink-0">Keys pressed</dt>
             <dd class="min-w-0 text-right break-words text-slate-500">{{ keys || 'None' }}</dd>
           </dl>
+        </div>
+        <div
+          v-if="midiHelp.length"
+          class="mt-1.5 space-y-1 px-3 text-xs font-normal text-slate-500"
+        >
+          <p v-for="message in midiHelp" :key="message">{{ message }}</p>
         </div>
       </fieldset>
 

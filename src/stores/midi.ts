@@ -1,9 +1,39 @@
 import { computed, onScopeDispose, ref } from 'vue';
 import { acceptHMRUpdate, defineStore } from 'pinia';
+import {
+  bluetoothMidiCharacteristic,
+  bluetoothMidiService,
+  decodeBluetoothMidi,
+  type BluetoothCharacteristic,
+  type BluetoothDevice,
+} from '../bluetooth-midi';
 
-type MidiInput = Pick<MIDIPort, 'name' | 'state'> & {
+type MidiInput = {
+  name: MIDIPort['name'];
+  state: MIDIPort['state'];
+  transport: 'midi' | 'bluetooth';
   pressed: Record<number, Set<number>>;
 };
+
+type BluetoothSession = {
+  device?: BluetoothDevice;
+  characteristic?: BluetoothCharacteristic;
+  id?: string;
+  scan?: AbortController;
+  receive: () => void;
+  disconnected: () => void;
+};
+
+const bluetoothDeviceKey = 'bluetooth-midi-device';
+
+function rememberBluetooth(id: string | null) {
+  try {
+    if (id) globalThis.localStorage?.setItem(bluetoothDeviceKey, id);
+    else globalThis.localStorage?.removeItem(bluetoothDeviceKey);
+  } catch {
+    // Storage may be disabled; the live connection can still be used.
+  }
+}
 
 export const useMidiStore = defineStore('midi', () => {
   const unavailable = ref(
@@ -16,6 +46,21 @@ export const useMidiStore = defineStore('midi', () => {
   const connecting = ref(false);
   const ready = ref(false);
   const error = ref('');
+  const bluetoothUnavailable = ref(
+    globalThis.isSecureContext === false
+      ? 'Bluetooth MIDI requires HTTPS or localhost.'
+      : typeof navigator === 'undefined' || !navigator.bluetooth
+        ? 'Web Bluetooth is unavailable in this browser. Use Chrome or Edge on a supported device.'
+        : '',
+  );
+  const bluetoothConnecting = ref(false);
+  const bluetoothReady = ref(false);
+  const bluetoothError = ref('');
+  const bluetoothRestoreUnavailable = ref(
+    !bluetoothUnavailable.value && typeof navigator.bluetooth?.getDevices !== 'function'
+      ? 'This browser requires selecting the Bluetooth keyboard again after a page refresh.'
+      : '',
+  );
   const inputs = ref<Record<string, MidiInput>>({});
   const connectedCount = computed(
     () => Object.values(inputs.value).filter((input) => input.state === 'connected').length,
@@ -30,6 +75,7 @@ export const useMidiStore = defineStore('midi', () => {
     ].sort((a, b) => a - b),
   );
   let access: MIDIAccess | undefined;
+  let bluetooth: BluetoothSession | undefined;
   let disposed = false;
 
   function updateInput(port: MIDIPort | null) {
@@ -38,6 +84,7 @@ export const useMidiStore = defineStore('midi', () => {
     inputs.value[port.id] = {
       name,
       state,
+      transport: 'midi',
       pressed: state === 'connected' ? (inputs.value[port.id]?.pressed ?? {}) : {},
     };
     const input = port as MIDIInput;
@@ -47,7 +94,7 @@ export const useMidiStore = defineStore('midi', () => {
     }
   }
 
-  function receiveMessage(id: string, data: MIDIMessageEvent['data']) {
+  function receiveMessage(id: string, data: Uint8Array | null) {
     if (!data || data.length < 3) return;
     const [status, pitch, velocity] = data;
     const command = status! & 0xf0;
@@ -94,14 +141,173 @@ export const useMidiStore = defineStore('midi', () => {
       });
       access = undefined;
     }
-    inputs.value = {};
+    for (const [id, input] of Object.entries(inputs.value)) {
+      if (input.transport === 'midi') delete inputs.value[id];
+    }
     ready.value = false;
     error.value = '';
+  }
+
+  function releaseBluetooth(session: BluetoothSession) {
+    session.scan?.abort();
+    session.device?.removeEventListener('gattserverdisconnected', session.disconnected);
+    session.characteristic?.removeEventListener('characteristicvaluechanged', session.receive);
+    if (session.id && inputs.value[session.id]) {
+      inputs.value[session.id]!.state = 'disconnected';
+      inputs.value[session.id]!.pressed = {};
+    }
+    if (bluetooth === session) {
+      bluetooth = undefined;
+      bluetoothReady.value = false;
+      bluetoothConnecting.value = false;
+    }
+  }
+
+  function closeBluetooth() {
+    const previous = bluetooth;
+    if (previous) {
+      releaseBluetooth(previous);
+      previous.device?.gatt?.disconnect();
+    }
+    for (const [id, input] of Object.entries(inputs.value)) {
+      if (input.transport === 'bluetooth') delete inputs.value[id];
+    }
+    bluetoothError.value = '';
+  }
+
+  function disconnectBluetooth() {
+    closeBluetooth();
+    rememberBluetooth(null);
+  }
+
+  function connectBluetooth() {
+    return connectBluetoothDevice(() =>
+      navigator.bluetooth!.requestDevice({ filters: [{ services: [bluetoothMidiService] }] }),
+    );
+  }
+
+  async function restoreBluetooth() {
+    if (bluetoothUnavailable.value || !navigator.bluetooth?.getDevices) return;
+    let id: string | null;
+    try {
+      id = globalThis.localStorage?.getItem(bluetoothDeviceKey) ?? null;
+    } catch {
+      return;
+    }
+    if (!id) return;
+    await connectBluetoothDevice(async () => {
+      const devices = await navigator.bluetooth!.getDevices!();
+      return devices.find((device) => device.id === id);
+    }, true);
+  }
+
+  async function connectBluetoothDevice(
+    select: () => Promise<BluetoothDevice | undefined>,
+    restoring = false,
+  ) {
+    if (bluetoothUnavailable.value || bluetoothConnecting.value || bluetoothReady.value || disposed)
+      return;
+    closeBluetooth();
+    bluetoothConnecting.value = true;
+    const session: BluetoothSession = {
+      receive() {
+        if (bluetooth !== session || !session.id || !session.characteristic?.value) return;
+        for (const message of decodeBluetoothMidi(session.characteristic.value)) {
+          receiveMessage(session.id, message);
+        }
+      },
+      disconnected() {
+        if (bluetooth === session) releaseBluetooth(session);
+      },
+    };
+    bluetooth = session;
+    try {
+      const device = await select();
+      if (bluetooth !== session) return;
+      if (!device) {
+        releaseBluetooth(session);
+        bluetoothError.value = 'Bluetooth permission was not retained. Select your keyboard again.';
+        return;
+      }
+      session.device = device;
+      session.id = `bluetooth:${device.id}`;
+      if (restoring && device.watchAdvertisements) {
+        // Previously authorized devices may be powered off or out of range.
+        const scan = (session.scan = new AbortController());
+        await new Promise<void>((resolve, reject) => {
+          const timeout = setTimeout(
+            () =>
+              scan.abort(
+                new Error('Bluetooth keyboard not found. Turn it on and try connecting again.'),
+              ),
+            10000,
+          );
+          const found = () => {
+            resolve();
+            scan.abort();
+          };
+          device.addEventListener('advertisementreceived', found, { once: true });
+          scan.signal.addEventListener(
+            'abort',
+            () => {
+              clearTimeout(timeout);
+              device.removeEventListener('advertisementreceived', found);
+              reject(scan.signal.reason);
+            },
+            { once: true },
+          );
+          void device.watchAdvertisements!({ signal: scan.signal }).catch((cause) =>
+            scan.abort(cause),
+          );
+        });
+        if (bluetooth !== session) return;
+      }
+      device.addEventListener('gattserverdisconnected', session.disconnected);
+      const server = await device.gatt!.connect();
+      if (bluetooth !== session) {
+        device.gatt!.disconnect();
+        return;
+      }
+      const service = await server.getPrimaryService(bluetoothMidiService);
+      if (bluetooth !== session) return;
+      const characteristic = await service.getCharacteristic(bluetoothMidiCharacteristic);
+      if (bluetooth !== session) return;
+      session.characteristic = characteristic;
+      // The initial read performs the BLE-MIDI connection/pairing handshake.
+      if (characteristic.properties.read) await characteristic.readValue();
+      if (bluetooth !== session) return;
+      inputs.value[session.id] = {
+        name: device.name ?? null,
+        state: 'disconnected',
+        transport: 'bluetooth',
+        pressed: {},
+      };
+      characteristic.addEventListener('characteristicvaluechanged', session.receive);
+      await characteristic.startNotifications();
+      if (bluetooth !== session) return;
+      inputs.value[session.id]!.state = 'connected';
+      bluetoothReady.value = true;
+      rememberBluetooth(device.id);
+    } catch (cause) {
+      if (bluetooth !== session) return;
+      closeBluetooth();
+      if (!restoring && cause instanceof Error && cause.name === 'NotFoundError' && !session.device)
+        return;
+      bluetoothError.value =
+        cause instanceof Error && cause.name === 'NotAllowedError'
+          ? 'Bluetooth permission denied. Allow Bluetooth access in your browser and system settings, then try again.'
+          : cause instanceof Error
+            ? cause.message
+            : String(cause);
+    } finally {
+      if (bluetooth === session) bluetoothConnecting.value = false;
+    }
   }
 
   onScopeDispose(() => {
     disposed = true;
     disconnect();
+    closeBluetooth();
   });
 
   return {
@@ -109,11 +315,19 @@ export const useMidiStore = defineStore('midi', () => {
     connecting,
     ready,
     error,
+    bluetoothUnavailable,
+    bluetoothConnecting,
+    bluetoothReady,
+    bluetoothError,
+    bluetoothRestoreUnavailable,
     inputs,
     connectedCount,
     pressedPitches,
     connect,
     disconnect,
+    connectBluetooth,
+    restoreBluetooth,
+    disconnectBluetooth,
   };
 });
 

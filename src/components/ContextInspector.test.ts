@@ -107,10 +107,16 @@ test('MIDI stays available without a score and does not change the score selecti
   sheet.selection = { kind: 'notes', indices: [0] };
   midi.ready = true;
   midi.inputs = {
-    keyboard: { name: 'Keyboard', state: 'connected', pressed: { 0: new Set([72, 76]) } },
+    keyboard: {
+      name: 'Keyboard',
+      state: 'connected',
+      transport: 'midi',
+      pressed: { 0: new Set([72, 76]) },
+    },
   };
   const html = await renderToString(createSSRApp(ContextInspector).use(pinia));
-  expect(html).toContain('C5 · E5');
+  expect(html).toContain('2 notes');
+  expect(html).toContain('title="C5 · E5"');
   expect(html).toContain('NOTE');
   expect(html).toContain('C4');
   expect(sheet.selection).toEqual({ kind: 'notes', indices: [0] });

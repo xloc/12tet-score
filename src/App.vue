@@ -4,13 +4,16 @@ import MusicControls from './components/MusicControls.vue';
 import MusicNotation from './components/MusicNotation.vue';
 import { usePlaybackStore } from './stores/playback';
 import { useScoreStore } from './stores/score';
+import { useMidiStore } from './stores/midi';
 
 const sheet = useScoreStore();
 const playback = usePlaybackStore();
+const midi = useMidiStore();
 const notation = useTemplateRef<InstanceType<typeof MusicNotation>>('notation');
 
 onMounted(() => {
   void sheet.initialize();
+  void midi.restoreBluetooth();
 });
 onBeforeUnmount(playback.stop);
 </script>
