@@ -2,7 +2,6 @@
 import { onBeforeUnmount, onMounted, useTemplateRef } from 'vue';
 import MusicControls from './components/MusicControls.vue';
 import MusicNotation from './components/MusicNotation.vue';
-import MusicStatusBar from './components/MusicStatusBar.vue';
 import { usePlaybackStore } from './stores/playback';
 import { useScoreStore } from './stores/score';
 
@@ -17,9 +16,7 @@ onBeforeUnmount(playback.stop);
 </script>
 
 <template>
-  <main
-    class="grid h-dvh grid-rows-[minmax(0,1fr)_auto_auto] overflow-hidden bg-white text-sm text-slate-900"
-  >
+  <main class="relative grid h-dvh grid-rows-1 overflow-hidden bg-white text-sm text-slate-900">
     <MusicNotation
       v-if="sheet.score"
       ref="notation"
@@ -41,6 +38,5 @@ onBeforeUnmount(playback.stop);
       <p v-else>No score loaded.</p>
     </div>
     <MusicControls @scroll-to-playhead="notation?.scrollToPlayhead()" />
-    <MusicStatusBar />
   </main>
 </template>

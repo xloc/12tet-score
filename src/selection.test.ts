@@ -114,14 +114,34 @@ test('note selections report elapsed span rather than the sum of overlapping dur
 
 test('the opening arpeggio suggests C major despite repeats, register, and order', () => {
   const opening = score.notes.filter((note) => note.at < ticksPerBar);
-  assert.deepEqual(chordNames(opening), ['C']);
-  assert.deepEqual(chordNames([...opening].reverse()), ['C']);
-  assert.deepEqual(chordNames(opening.map((note) => ({ ...note, pitch: note.pitch + 2 }))), ['D']);
+  assert.deepEqual(chordNames(opening), ['CM', 'Em#5/C']);
+  assert.deepEqual(chordNames([...opening].reverse()), ['CM', 'Em#5/C']);
+  assert.deepEqual(chordNames(opening.map((note) => ({ ...note, pitch: note.pitch + 2 }))), [
+    'DM',
+    'F#m#5/D',
+  ]);
 });
 
 test('ambiguous chord sets keep their alternative names', () => {
   const pitches = [60, 64, 67, 69].map((pitch) => ({ pitch, at: 0, len: 480, voice: 1 }));
-  assert.deepEqual(chordNames(pitches), ['C6', 'Am7']);
+  assert.deepEqual(chordNames(pitches), ['C6', 'Am7/C']);
+});
+
+test('chord inversions use the lowest MIDI pitch without changing the source note order', () => {
+  const pitches = [62, 57, 60, 54];
+  const notes = pitches.map((pitch) => ({ pitch, at: 0, len: 480, voice: 1 }));
+  assert.deepEqual(chordNames(notes), ['D7/F#']);
+  assert.deepEqual(chordNames([...notes].reverse()), ['D7/F#']);
+  assert.deepEqual(
+    notes.map((note) => note.pitch),
+    pitches,
+  );
+});
+
+test('chord detection supports extensions and converts sharp MIDI pitches', () => {
+  const notes = [48, 52, 55, 58, 62].map((pitch) => ({ pitch, at: 0, len: 480, voice: 1 }));
+  assert.deepEqual(chordNames(notes), ['C9']);
+  assert.deepEqual(chordNames(notes.map((note) => ({ ...note, pitch: note.pitch + 1 }))), ['C#9']);
 });
 
 test('empty, incomplete, and mixed pitch sets do not receive a forced chord name', () => {

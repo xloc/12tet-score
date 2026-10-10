@@ -178,10 +178,10 @@ function clearSelection() {
 </script>
 
 <template>
-  <div ref="viewport" class="min-h-0 overflow-auto">
+  <div ref="viewport" class="min-h-0 scroll-pb-32 overflow-auto">
     <div
       ref="surface"
-      class="relative grid w-full grid-cols-1 touch-pan-y touch-pinch-zoom gap-y-12 py-4 select-none"
+      class="relative grid w-full grid-cols-1 touch-pan-y touch-pinch-zoom gap-y-12 pt-4 pb-32 select-none"
       title="Command-click to move the playhead; drag to select notes; Alt/Option-drag to select a time range"
       @pointerdown="start"
       @pointermove="move"

@@ -3,88 +3,19 @@ import { createSSRApp } from 'vue';
 import { renderToString } from 'vue/server-renderer';
 import { createPinia } from 'pinia';
 import App from '../App.vue';
-import { selectedIndices, type MusicSelection } from '../selection';
+import type { MusicSelection } from '../selection';
 import { usePlaybackStore } from '../stores/playback';
 import { useScoreStore } from '../stores/score';
-import { createScoreStore, score, ticksPerBar, barCount } from '../test/score';
+import { createScoreStore, score, ticksPerBar, totalTicks } from '../test/score';
 import MusicControls from './MusicControls.vue';
 
-async function renderInfo(selection: MusicSelection, bpm = score.bpm) {
-  const pinia = createPinia();
-  createScoreStore(pinia).selection = selection;
-  usePlaybackStore(pinia).bpm = bpm;
-  const html = await renderToString(createSSRApp(MusicControls).use(pinia));
-  const panel = html.match(/<section\b[^>]*>[\s\S]*?<\/section>/g)![1]!;
-  const fields = [...panel.matchAll(/<dt\b[^>]*>([^<]*)<\/dt>\s*<dd\b[^>]*>([^<]*)<\/dd>/g)].map(
-    (match) => ({ label: match[1]!.trim(), value: match[2]!.trim() }),
-  );
-  const buttons = [...panel.matchAll(/<button([^>]*)>([\s\S]*?)<\/button>/g)];
-  const hear = buttons.find(
-    (match) => match[2]!.replace(/<!--[\s\S]*?-->/g, '').trim() === 'Hear',
-  )!;
-  return { panel, fields, hearDisabled: /(?:^|\s)disabled(?:\s|=|$)/.test(hear[1]!) };
+function textContent(html: string) {
+  return html
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
-
-test('empty selection shows the current tempo, meter, and piece length', async () => {
-  const { panel, fields, hearDisabled } = await renderInfo({ kind: 'notes', indices: [] }, 80);
-  expect(panel).toContain('Whole piece');
-  expect(fields).toEqual([
-    { label: 'Tempo', value: '80 BPM' },
-    { label: 'Meter', value: score.meter.join('/') },
-    { label: 'Length', value: `${barCount} measures` },
-  ]);
-  expect(hearDisabled).toBe(true);
-});
-
-test('one note shows pitch, position, held duration, and the playback tempo', async () => {
-  const { panel, fields, hearDisabled } = await renderInfo({ kind: 'notes', indices: [0] }, 90);
-  expect(panel).toContain('C4');
-  expect(fields).toEqual([
-    { label: 'Measure · beat', value: '1 · 1' },
-    { label: 'Duration', value: '2 beats' },
-    { label: 'Tempo', value: '90 BPM' },
-  ]);
-  expect(hearDisabled).toBe(false);
-});
-
-test('multiple notes show elapsed span and a suggested chord', async () => {
-  const { panel, fields } = await renderInfo({ kind: 'notes', indices: [0, 1, 2] });
-  expect(panel).toContain('3 notes');
-  expect(fields).toEqual([
-    { label: 'Measure · beat', value: '1 · 1' },
-    { label: 'Time span', value: '2 beats' },
-    { label: 'Possible chord', value: 'C' },
-  ]);
-});
-
-test('a time range shows its own span and the notes sounding within it', async () => {
-  const selection: MusicSelection = { kind: 'range', from: 0, to: ticksPerBar };
-  const { panel, fields } = await renderInfo(selection);
-  expect(panel).toContain(`${selectedIndices(score.notes, selection).length} notes`);
-  expect(fields).toEqual([
-    { label: 'Measure · beat', value: '1 · 1' },
-    { label: 'Time span', value: '4 beats' },
-    { label: 'Possible chord', value: 'C' },
-  ]);
-});
-
-test('switching contexts preserves the same panel elements and layout classes', async () => {
-  const selections: MusicSelection[] = [
-    { kind: 'notes', indices: [] },
-    { kind: 'notes', indices: [0] },
-    { kind: 'notes', indices: [0, 1, 2] },
-    { kind: 'range', from: 0, to: ticksPerBar },
-  ];
-  const panels = await Promise.all(
-    selections.map(async (selection) => (await renderInfo(selection)).panel),
-  );
-  const shapes = panels.map((panel) =>
-    panel
-      .match(/<[a-z][^>]*>/g)!
-      .map((tag) => tag.replace(/ title="[^"]*"/g, '').replace(/ disabled/g, '')),
-  );
-  for (const shape of shapes) expect(shape).toEqual(shapes[0]);
-});
 
 test('settings show the shared pitch-fold threshold', async () => {
   const pinia = createPinia();
@@ -96,7 +27,7 @@ test('settings show the shared pitch-fold threshold', async () => {
     const input = html.match(/<input\b[^>]*id="fold-threshold"[^>]*>/)![0];
     const output = html.match(/<output\b[^>]*for="fold-threshold"[^>]*>([^<]*)<\/output>/)![1];
     expect(input).toContain(`value="${threshold}"`);
-    expect(output!.trim()).toBe(threshold === 0 ? '0 (off)' : `${threshold} unused pitches`);
+    expect(output!.trim()).toBe(threshold === 0 ? 'Off' : `${threshold} unused pitches`);
   }
 });
 
@@ -146,6 +77,59 @@ test('transport switches between Play, Pause, and Resume and always allows going
   }
 });
 
+test('play selection belongs to transport and is disabled for empty selections or during playback', async () => {
+  for (const [selection, status, disabled] of [
+    [{ kind: 'notes', indices: [] }, 'stopped', true],
+    [{ kind: 'notes', indices: [0] }, 'stopped', false],
+    [{ kind: 'notes', indices: [0] }, 'playing', true],
+    [{ kind: 'notes', indices: [0] }, 'paused', false],
+    [{ kind: 'range', from: totalTicks, to: totalTicks + 480 }, 'stopped', true],
+  ] satisfies [MusicSelection, 'stopped' | 'playing' | 'paused', boolean][]) {
+    const pinia = createPinia();
+    createScoreStore(pinia).selection = selection;
+    usePlaybackStore(pinia).status = status;
+    const html = await renderToString(createSSRApp(MusicControls).use(pinia));
+    const panels = html.match(/<section\b[^>]*>[\s\S]*?<\/section>/g)!;
+    const button = panels[0]!.match(/<button\b[^>]*title="Play selection"[^>]*>/)![0];
+    expect(/\sdisabled(?:\s|=|>)/.test(button)).toBe(disabled);
+    expect(panels).toHaveLength(3);
+    expect(panels[1]).not.toContain('Play selection');
+    expect(panels[0]).not.toContain('title="Settings"');
+    expect(panels[1]).toContain('title="Settings"');
+    expect(panels[1]).not.toContain('<dialog');
+  }
+});
+
+test('normal play uses the playhead while play selection uses only the selected notes and span', async () => {
+  for (const selection of [
+    { kind: 'notes', indices: [0, 1, 2] },
+    { kind: 'range', from: 120, to: ticksPerBar },
+  ] satisfies MusicSelection[]) {
+    const pinia = createPinia();
+    const sheet = createScoreStore(pinia);
+    sheet.selection = selection;
+    const playback = usePlaybackStore(pinia);
+    playback.currentTick = 480;
+    const play = vi.spyOn(playback, 'play').mockResolvedValue(undefined);
+    const actions = new Map<string, () => unknown>();
+    const app = createSSRApp(MusicControls).use(pinia);
+    app.mixin({
+      created() {
+        const { title, onClick } = this.$attrs;
+        if (typeof title === 'string' && typeof onClick === 'function') {
+          actions.set(title, () => onClick());
+        }
+      },
+    });
+    await renderToString(app);
+    await actions.get('Play')!();
+    expect(play).toHaveBeenLastCalledWith(sheet.score!.notes, 480, sheet.totalTicks);
+    await actions.get('Play selection')!();
+    expect(play).toHaveBeenLastCalledWith(sheet.selectedNotes, sheet.span!.from, sheet.span!.to);
+    play.mockRestore();
+  }
+});
+
 test('the app renders a loaded score with its own timing and metadata', async () => {
   const pinia = createPinia();
   const sheet = createScoreStore(pinia);
@@ -159,19 +143,38 @@ test('the app renders a loaded score with its own timing and metadata', async ()
     notes: [{ pitch: 72, at: 720, len: 720, voice: 1 }],
   });
   const html = await renderToString(createSSRApp(App).use(pinia));
-  expect(html).toContain('Loaded piece');
-  expect(html).toContain('Another composer');
+  const scorePanel = html
+    .match(/<section\b[^>]*>[\s\S]*?<\/section>/g)!
+    .find((panel) => panel.includes('title="Music score"'));
+  expect(scorePanel).toContain('Loaded piece');
+  expect(textContent(scorePanel!)).toContain('by Another composer');
+  const summary = scorePanel!.replace(/<dialog\b[\s\S]*?<\/dialog>/g, '');
+  expect(summary).toMatch(/<button\b[^>]*title="Music score"[^>]*>/);
+  expect(summary).not.toContain(score.collection);
+  expect(summary.match(/<button\b/g)).toHaveLength(1);
+  expect(scorePanel).not.toContain('<dialog');
+  const scoreDialog = html
+    .match(/<dialog\b[^>]*>[\s\S]*?<\/dialog>/g)!
+    .find((dialog) => dialog.includes('Current score'))!;
+  expect(scoreDialog).toContain(score.collection);
+  expect(scoreDialog).toContain(score.source.url);
+  expect(scoreDialog).toContain(score.source.license);
+  expect(scoreDialog).not.toContain('Higher means higher pitch');
+  expect(html.match(/<dialog\b/g)).toHaveLength(2);
+  expect(html).not.toContain('<footer');
   expect(html.match(/data-note-index/g)).toHaveLength(1);
-  expect(html).toContain('90 BPM');
+  expect(textContent(html)).toContain('90 BPM');
   expect(html).toContain('3/4');
-  expect(html).toContain('2 measures');
+  expect(textContent(html)).toContain('2 measures');
   expect(html).toContain('max="1440"');
   expect(html).toContain('/ 6 beats');
   sheet.selection = { kind: 'notes', indices: [0] };
   const selected = await renderToString(createSSRApp(MusicControls).use(pinia));
   expect(selected).toContain('C5');
-  expect(selected).toContain('2 · 1');
-  expect(selected).toContain('3 beats');
+  const inspector = selected.match(/<section\b[^>]*>[\s\S]*?<\/section>/g)![1]!;
+  expect(textContent(inspector.replace(/<dialog\b[\s\S]*?<\/dialog>/g, ''))).toContain(
+    'NOTE C5 SELECTED 1 note MIDI',
+  );
 });
 
 test('the app keeps the load dialog available while the initial public score is loading or fails', async () => {
@@ -191,16 +194,20 @@ test('the app keeps the load dialog available while the initial public score is 
     const loading = sheet.loadHosted('missing.json');
     const pending = await renderToString(createSSRApp(App).use(pinia));
     expect(pending).toContain('Loading score…');
-    expect(pending).toContain('MIDI device');
+    expect(pending).toContain('title="Settings"');
     expect(pending).not.toContain('data-note-index');
-    expect(pending.match(/<dialog\b/g)).toHaveLength(1);
+    expect(pending.match(/<dialog\b/g)).toHaveLength(2);
     expect(pending).toContain('accept=".json,application/json"');
+    const scorePanel = pending
+      .match(/<section\b[^>]*>[\s\S]*?<\/section>/g)!
+      .find((panel) => panel.includes('No score loaded'));
+    expect(scorePanel).toContain('Load score');
     ready(new Response('', { status: 404 }));
     expect(await loading).toBe(false);
     const failed = await renderToString(createSSRApp(App).use(pinia));
     expect(failed).toContain('Could not load score (404).');
     expect(failed).toContain('Load score');
-    expect(failed).toContain('MIDI device');
+    expect(failed).toContain('title="Settings"');
     expect(failed).not.toContain('data-note-index');
   } finally {
     vi.unstubAllGlobals();

@@ -85,19 +85,36 @@ export const useMidiStore = defineStore('midi', () => {
     }
   }
 
-  onScopeDispose(() => {
-    disposed = true;
+  function disconnect() {
     if (access) {
       access.onstatechange = null;
       access.inputs.forEach((input) => {
         input.onmidimessage = null;
         void input.close();
       });
+      access = undefined;
     }
-    for (const input of Object.values(inputs.value)) input.pressed = {};
+    inputs.value = {};
+    ready.value = false;
+    error.value = '';
+  }
+
+  onScopeDispose(() => {
+    disposed = true;
+    disconnect();
   });
 
-  return { unavailable, connecting, ready, error, inputs, connectedCount, pressedPitches, connect };
+  return {
+    unavailable,
+    connecting,
+    ready,
+    error,
+    inputs,
+    connectedCount,
+    pressedPitches,
+    connect,
+    disconnect,
+  };
 });
 
 if (import.meta.hot) {

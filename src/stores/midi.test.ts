@@ -171,6 +171,29 @@ test('disposing the store clears held keys, removes listeners, and closes its in
   expect(midi.pressedPitches).toEqual([]);
 });
 
+test('disconnect closes input ports, clears held notes, and allows connecting again', async () => {
+  const access = createAccess([usb, ble]);
+  requestMIDIAccess.mockResolvedValue(access);
+  await midi.connect();
+  message(usb, [0x90, 60, 100]);
+  message(ble, [0x90, 64, 100]);
+  midi.disconnect();
+  expect(midi.ready).toBe(false);
+  expect(midi.inputs).toEqual({});
+  expect(midi.pressedPitches).toEqual([]);
+  expect(access.onstatechange).toBeNull();
+  for (const port of [usb, ble]) {
+    expect(port.onmidimessage).toBeNull();
+    expect(port.close).toHaveBeenCalledOnce();
+  }
+  await midi.connect();
+  expect(requestMIDIAccess).toHaveBeenCalledTimes(2);
+  expect(midi.ready).toBe(true);
+  expect(midi.connectedCount).toBe(2);
+  message(usb, [0x90, 67, 100]);
+  expect(midi.pressedPitches).toEqual([67]);
+});
+
 test('a request resolved after disposal does not attach a device listener', async () => {
   const access = createAccess([usb]);
   let allow!: (value: typeof access) => void;
