@@ -5,10 +5,10 @@ import { scoreLines } from '../layout';
 import MusicBar from './MusicBar.vue';
 
 async function heldNote() {
-  const note = { pitch: 60, at: 1440, len: 2880, voice: 3 };
-  const lines = scoreLines([note, { pitch: 72, at: 3840, len: 480, voice: 1 }], 5760, {
+  const note = { pitch: 60, at: 1440, len: 2880, groups: ['lh', '3'] };
+  const lines = scoreLines([note, { pitch: 72, at: 3840, len: 480, groups: ['rh', '1'] }], 5760, {
     ppq: 480,
-    ticksPerBar: 1920,
+    meters: [{ at: 0, meter: '4/4' }],
     width: 1024,
     rem: 16,
     foldThreshold: 0,
@@ -26,6 +26,8 @@ async function heldNote() {
                 bar,
                 ppq: 480,
                 selected: new Set([0]),
+                groups: [],
+                pitchGuides: [],
                 labels: {},
                 range: { from: 1440, to: 4320 },
                 playhead: undefined,
@@ -54,7 +56,7 @@ test('held notes use one fragment rule across bar and line boundaries with one l
   expect(fragments[1]).not.toContain('data-pitch-label');
   expect(fragments[2]).toContain('C4');
   expect(fragments[2]).toContain('←');
-  expect(fragments.every((fragment) => fragment.includes('bg-teal-700'))).toBe(true);
+  expect(fragments.every((fragment) => fragment.includes('outline-teal-700'))).toBe(true);
   expect(note.len).toBe(2880);
 });
 

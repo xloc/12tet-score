@@ -7,7 +7,8 @@ import {
   type ScoreBar,
   type ScoreLine,
 } from '../layout';
-import { pitchLabel, type Note } from '../music';
+import { pitchLabel, type Note, type NoteGroup, type PitchGuide } from '../music';
+import { groupAppearance } from '../groups';
 
 const props = defineProps<{
   bar: ScoreBar;
@@ -17,6 +18,8 @@ const props = defineProps<{
   range: { from: number; to: number } | null;
   playhead: number | undefined;
   labels: Record<number, PitchLabelLayout>;
+  groups: NoteGroup[];
+  pitchGuides: PitchGuide[];
 }>();
 const emit = defineEmits<{ select: [index: number, event: MouseEvent]; clear: [] }>();
 
@@ -96,6 +99,31 @@ function hasLabel(note: Note) {
       ></span>
     </template>
     <span
+      v-for="guide in pitchGuides.filter(
+        (guide) => guide.at < bar.to && guide.at + guide.len > bar.from,
+      )"
+      :key="guide.at"
+      class="contents"
+    >
+      <span
+        v-for="pitch in line.rows.filter(
+          (row): row is number =>
+            typeof row === 'number' &&
+            (guide.pitches ? guide.pitches.includes(row) : guide.pitchClasses.includes(row % 12)),
+        )"
+        :key="pitch"
+        data-pitch-guide
+        :data-guide-pitch="pitch"
+        class="pointer-events-none relative h-px self-center bg-teal-500"
+        :style="{
+          gridRow: line.rows.indexOf(pitch) + 1,
+          gridColumn: '1 / -1',
+          ...timePlacement(guide.at, guide.at + guide.len, bar),
+        }"
+        :title="guide.text"
+      ></span>
+    </span>
+    <span
       v-if="playhead !== undefined"
       data-playhead
       class="pointer-events-none absolute inset-y-0 z-20 w-px bg-teal-600"
@@ -106,16 +134,19 @@ function hasLabel(note: Note) {
       :key="index"
       class="relative z-10 h-1 min-w-0 cursor-pointer self-center text-left font-medium enabled:hover:brightness-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700"
       :class="[
-        selected.has(index) ? 'bg-teal-700 text-teal-700' : 'bg-slate-700 text-slate-700',
         {
+          'outline-2 outline-teal-700': selected.has(index),
           'rounded-l-sm': hasLabel(note),
           'rounded-r-sm': note.at + note.len <= bar.to || bar.to === line.to,
         },
       ]"
       :data-note-index="index"
       :tabindex="hasLabel(note) ? 0 : -1"
-      :style="notePlacement(note, line, bar)"
-      :title="`${pitchLabel(note.pitch)} · ${note.len / ppq} beats`"
+      :style="{ ...notePlacement(note, line, bar), ...groupAppearance(note.groups, groups) }"
+      :title="`${pitchLabel(note.pitch)} · ${note.len / ppq} quarter notes${note.finger ? ` · finger ${note.finger}` : ''}${note.text ? ` · ${note.text}` : ''} · ${groups
+        .filter((group) => note.groups.includes(group.id))
+        .map((group) => group.name)
+        .join(', ')}`"
       @click="emit('select', index, $event)"
     >
       <template v-if="hasLabel(note)">
@@ -130,17 +161,26 @@ function hasLabel(note: Note) {
         ></span>
         <span
           data-pitch-label
-          class="absolute -top-4 left-0 px-0.5 text-xs leading-4 whitespace-nowrap"
-          :style="
-            labels[index] && {
+          class="absolute bottom-full left-0 flex w-max flex-col px-0.5 text-xs leading-4"
+          :class="{ 'flex-col-reverse': !labels[index] || labels[index]!.connector.top <= 0 }"
+          :style="{
+            maxWidth: `min(12rem, ${line.minimum}px)`,
+            ...(labels[index] && {
+              bottom: 'auto',
               left: `${labels[index]!.label.left}px`,
               top: `${labels[index]!.label.top}px`,
-            }
-          "
+            }),
+          }"
         >
-          <span v-if="note.at < line.from">←</span>
-          {{ pitchLabel(note.pitch) }}
-          <span v-if="note.at + note.len > line.to">→</span>
+          <span>
+            <span v-if="note.at < line.from">←</span>
+            {{ pitchLabel(note.pitch) }}
+            <span v-if="note.finger"> · finger {{ note.finger }}</span>
+            <span v-if="note.at + note.len > line.to">→</span>
+          </span>
+          <span v-if="note.text" class="block font-normal" style="overflow-wrap: anywhere">{{
+            note.text
+          }}</span>
         </span>
       </template>
     </button>

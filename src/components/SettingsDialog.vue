@@ -179,7 +179,7 @@ defineExpose({
           <div class="flex items-baseline justify-between gap-3">
             <label for="tempo">Playback speed</label>
             <output for="tempo" class="text-slate-500 tabular-nums">
-              {{ playback.bpm }} <span class="text-xs">BPM</span>
+              {{ Math.round((playback.bpm / sheet.score.tempos[0]!.bpm) * 100) }}%
             </output>
           </div>
           <input
@@ -194,7 +194,7 @@ defineExpose({
             {{
               playback.playing
                 ? 'Pause playback to change its speed.'
-                : 'Adjust playback without changing the score tempo.'
+                : 'Scale all tempo changes together without changing the score.'
             }}
           </p>
         </div>

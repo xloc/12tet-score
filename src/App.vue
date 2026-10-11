@@ -23,10 +23,8 @@ onBeforeUnmount(playback.stop);
     <MusicNotation
       v-if="sheet.score"
       ref="notation"
-      :notes="sheet.score.notes"
+      :score="sheet.score"
       :total-ticks="sheet.totalTicks"
-      :ppq="sheet.score.ppq"
-      :ticks-per-bar="sheet.ticksPerBar"
       :fold-threshold="sheet.foldThreshold"
       :variable-bar-width="sheet.variableBarWidth"
       :playhead="playback.currentTick"

@@ -1,6 +1,7 @@
 import { computed, ref } from 'vue';
 import { acceptHMRUpdate, defineStore } from 'pinia';
-import type { Score, ScoreEntry } from '../music.ts';
+import { scoreDuration, type Score, type ScoreEntry } from '../music.ts';
+import { scoreBars, validateTempos } from '../timing';
 import { selectedIndices, selectionSpan, type MusicSelection } from '../selection.ts';
 
 export const useScoreStore = defineStore('score', () => {
@@ -8,15 +9,13 @@ export const useScoreStore = defineStore('score', () => {
   const catalog = ref<ScoreEntry[]>([]);
   const loading = ref(false);
   const error = ref('');
-  const totalTicks = computed(() =>
-    Math.max(0, ...(score.value?.notes.map((note) => note.at + note.len) ?? [])),
+  const totalTicks = computed(() => (score.value ? scoreDuration(score.value) : 0));
+  const bars = computed(() =>
+    score.value
+      ? scoreBars(totalTicks.value, score.value.ppq, score.value.meters, score.value.sections)
+      : [],
   );
-  const ticksPerBar = computed(() =>
-    score.value ? (score.value.ppq * score.value.meter[0]! * 4) / score.value.meter[1]! : 0,
-  );
-  const barCount = computed(() =>
-    ticksPerBar.value ? Math.ceil(totalTicks.value / ticksPerBar.value) : 0,
-  );
+  const barCount = computed(() => bars.value.length);
   const foldThreshold = ref(12);
   const variableBarWidth = ref(false);
   const selection = ref<MusicSelection>({ kind: 'notes', indices: [] });
@@ -32,6 +31,9 @@ export const useScoreStore = defineStore('score', () => {
   );
 
   function load(next: Score) {
+    if (!Number.isFinite(next.ppq) || next.ppq <= 0) throw new Error('PPQ must be positive.');
+    validateTempos(next.tempos);
+    scoreBars(scoreDuration(next), next.ppq, next.meters, next.sections);
     selection.value = { kind: 'notes', indices: [] };
     score.value = next;
   }
@@ -84,7 +86,7 @@ export const useScoreStore = defineStore('score', () => {
     loading,
     error,
     totalTicks,
-    ticksPerBar,
+    bars,
     barCount,
     foldThreshold,
     variableBarWidth,

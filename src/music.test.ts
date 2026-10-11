@@ -6,7 +6,7 @@ import { score, totalTicks, ticksPerBar, barCount } from './test/score';
 
 const layout: ScoreLayout = {
   ppq: score.ppq,
-  ticksPerBar,
+  meters: score.meters,
   width: 512,
   rem: 16,
   foldThreshold: 0,
@@ -17,9 +17,9 @@ test('the complete prelude has 35 measures, 549 notes, and three voices', () => 
   assert.equal(barCount, 35);
   assert.equal(score.notes.length, 549);
   assert.equal(totalTicks, 67200);
-  assert.equal(seconds(totalTicks, score.bpm, score.ppq), 140);
-  for (const voice of score.voices) {
-    const notes = score.notes.filter((note) => note.voice === voice.id);
+  assert.equal(seconds(totalTicks, score.tempos[0]!.bpm, score.ppq), 140);
+  for (const voice of score.groups.filter((group) => group.kind === 'voice')) {
+    const notes = score.notes.filter((note) => note.groups.includes(voice.id));
     assert.equal(Math.max(...notes.map((note) => note.at + note.len)), totalTicks);
     assert(
       notes.every(
@@ -38,16 +38,16 @@ test('the opening preserves the held bass and tied middle note beneath the arpeg
   assert.deepEqual(
     score.notes.filter((note) => note.at < 600),
     [
-      { pitch: 60, at: 0, len: 960, voice: 3 },
-      { pitch: 64, at: 120, len: 840, voice: 2 },
-      { pitch: 67, at: 240, len: 120, voice: 1 },
-      { pitch: 72, at: 360, len: 120, voice: 1 },
-      { pitch: 76, at: 480, len: 120, voice: 1 },
+      { pitch: 60, at: 0, len: 960, groups: ['lh', '3'] },
+      { pitch: 64, at: 120, len: 840, groups: ['lh', '2'] },
+      { pitch: 67, at: 240, len: 120, groups: ['rh', '1'] },
+      { pitch: 72, at: 360, len: 120, groups: ['rh', '1'] },
+      { pitch: 76, at: 480, len: 120, groups: ['rh', '1'] },
     ],
   );
   assert.deepEqual(
     score.notes.filter((note) => note.at === 960),
-    [{ pitch: 60, at: 960, len: 960, voice: 3 }],
+    [{ pitch: 60, at: 960, len: 960, groups: ['lh', '3'] }],
   );
 });
 
@@ -58,7 +58,7 @@ test('the closing chord contains five sustained notes in the final measure', () 
     [36, 48, 64, 67, 72],
   );
   assert(closing.every((note) => note.len === ticksPerBar));
-  assert.equal(score.annotations.at(-1)?.kind, 'performance');
+  assert.match(score.annotations.at(-1)!.text, /hold it longer/);
 });
 
 test('pitch labels retain register across octave boundaries', () => {
@@ -69,7 +69,7 @@ test('pitch labels retain register across octave boundaries', () => {
 });
 
 test('duration is proportional and semitone geometry survives transposition', () => {
-  const base = { pitch: 60, at: 0, len: 480, voice: 1 };
+  const base = { pitch: 60, at: 0, len: 480, groups: ['rh', '1'] };
   const notes = [base, { ...base, pitch: 72 }];
   const line = scoreLines(notes, ticksPerBar, layout)[0]!;
   assert.deepEqual(notePlacement(base, line, line.bars[0]!), {
@@ -105,7 +105,7 @@ test('duration is proportional and semitone geometry survives transposition', ()
 });
 
 test('a held note crossing the viewing boundary is clipped without changing source duration', () => {
-  const note = { pitch: 60, at: 1800, len: 480, voice: 1 };
+  const note = { pitch: 60, at: 1800, len: 480, groups: ['rh', '1'] };
   const line = scoreLines([note, { ...note, pitch: 72 }], 3840, layout)[1]!;
   assert.deepEqual(notePlacement(note, line, line.bars[0]!), {
     gridRow: 13,
@@ -117,11 +117,11 @@ test('a held note crossing the viewing boundary is clipped without changing sour
 });
 
 test('notation geometry uses the supplied tick resolution instead of the demo score', () => {
-  const note = { pitch: 60, at: 240, len: 240, voice: 1 };
+  const note = { pitch: 60, at: 240, len: 240, groups: ['rh', '1'] };
   const line = scoreLines([note, { ...note, pitch: 72 }], 960, {
     ...layout,
     ppq: 240,
-    ticksPerBar: 960,
+    meters: [{ at: 0, meter: '4/4' }],
   })[0]!;
   assert.deepEqual(notePlacement(note, line, line.bars[0]!), {
     gridRow: 13,
@@ -156,8 +156,8 @@ test('score lines break at measure boundaries and crop each line to its sounding
 });
 
 test('notes held across a line break keep their identity and contribute to both pitch ranges', () => {
-  const held = { pitch: 48, at: 1440, len: 960, voice: 3 };
-  const upper = { pitch: 76, at: 1920, len: 480, voice: 1 };
+  const held = { pitch: 48, at: 1440, len: 960, groups: ['lh', '3'] };
+  const upper = { pitch: 76, at: 1920, len: 480, groups: ['rh', '1'] };
   const lines = scoreLines([held, upper], 3840, layout);
   assert.equal(lines[0]!.notes[0]!.note, held);
   assert.equal(lines[1]!.notes[0]!.note, held);
@@ -198,8 +198,8 @@ test('changing line width changes wrapping without changing notes or elapsed tim
 
 test('a silent measure keeps its place between sounding measures', () => {
   const notes = [
-    { pitch: 60, at: 0, len: 480, voice: 1 },
-    { pitch: 72, at: 3840, len: 480, voice: 1 },
+    { pitch: 60, at: 0, len: 480, groups: ['rh', '1'] },
+    { pitch: 72, at: 3840, len: 480, groups: ['rh', '1'] },
   ];
   const lines = scoreLines(notes, 5760, { ...layout, foldThreshold: 12 });
   assert.equal(lines.length, 3);
@@ -237,9 +237,9 @@ test('each large pitch gap folds while smaller intervals retain semitone spacing
 
 test('folding includes every pitch used anywhere in the line and carried held notes', () => {
   const notes = [
-    { pitch: 48, at: 1440, len: 960, voice: 3 },
-    { pitch: 60, at: 1920, len: 120, voice: 2 },
-    { pitch: 76, at: 2400, len: 480, voice: 1 },
+    { pitch: 48, at: 1440, len: 960, groups: ['lh', '3'] },
+    { pitch: 60, at: 1920, len: 120, groups: ['lh', '2'] },
+    { pitch: 76, at: 2400, len: 480, groups: ['rh', '1'] },
   ];
   const lines = scoreLines(notes, 3840, { ...layout, foldThreshold: 12 });
   assert.deepEqual(lines[0]!.rows, [48]);

@@ -1,4 +1,4 @@
-import { placePitchLabels } from './labels';
+import { pitchLabelSearchBudget, placePitchLabels } from './labels';
 import type { ScoreLine } from './layout';
 import type { Rect, TimeLine } from './selection';
 
@@ -72,7 +72,9 @@ export function layoutPitchLabels(surface: HTMLElement, lines: ScoreLine[]) {
     return { ...note, width: label.offsetWidth, height: label.offsetHeight };
   });
   const obstacles: Rect[] = Array.from(
-    surface.querySelectorAll<HTMLElement>('[data-pitch-fold], [data-time-label]'),
+    surface.querySelectorAll<HTMLElement>(
+      '[data-pitch-fold], [data-time-label], [data-label-obstacle]',
+    ),
   ).map((element) => {
     const rect = element.getBoundingClientRect();
     return {
@@ -82,27 +84,67 @@ export function layoutPitchLabels(surface: HTMLElement, lines: ScoreLine[]) {
       bottom: rect.bottom - bounds.top,
     };
   });
-  const positions = placePitchLabels(
-    notes,
-    Math.max(bounds.width, surface.scrollWidth),
-    bounds.height,
-    obstacles,
-  );
-  const layouts: Record<number, Record<number, PitchLabelLayout>> = {};
-  for (const [index, label] of positions.entries()) {
-    const { bar, lineFrom, index: noteIndex } = notes[index]!;
-    const above = label.bottom <= bar.top;
-    const top = above ? label.bottom : bar.bottom;
-    const bottom = above ? bar.top : label.top;
-    layouts[lineFrom] ??= {};
-    layouts[lineFrom]![noteIndex] = {
-      label: { left: label.left - bar.left, top: label.top - bar.top },
-      connector: {
-        left: Math.max(bar.left, Math.min(bar.right, (label.left + label.right) / 2)) - bar.left,
-        top: top - bar.top,
-        height: Math.max(0, bottom - top),
-      },
-    };
+  const labels: Record<number, Record<number, PitchLabelLayout>> = {};
+  const overflows: Record<number, number> = {};
+  const searchBudget = { remaining: pitchLabelSearchBudget };
+  for (const [lineIndex, element] of surface
+    .querySelectorAll<HTMLElement>('[data-score-line]')
+    .entries()) {
+    const line = lines[lineIndex]!;
+    const roll = element.querySelector<HTMLElement>('[data-piano-roll]')!.getBoundingClientRect();
+    const left = roll.left - bounds.left;
+    const top = roll.top - bounds.top;
+    const bottom =
+      Math.max(
+        ...Array.from(element.querySelectorAll<HTMLElement>('[data-score-bar]')).map(
+          (bar) => bar.getBoundingClientRect().bottom,
+        ),
+      ) - bounds.top;
+    const localNotes = notes
+      .filter((note) => note.lineFrom === line.from)
+      .map((note) => ({
+        ...note,
+        bar: {
+          left: note.bar.left - left,
+          right: note.bar.right - left,
+          top: note.bar.top - top,
+          bottom: note.bar.bottom - top,
+        },
+      }));
+    const positions = placePitchLabels(
+      localNotes,
+      roll.width,
+      bottom - top,
+      obstacles
+        .filter((obstacle) => obstacle.top >= top && obstacle.bottom <= bottom)
+        .map((obstacle) => ({
+          left: obstacle.left - left,
+          right: obstacle.right - left,
+          top: obstacle.top - top,
+          bottom: obstacle.bottom - top,
+        })),
+      true,
+      searchBudget,
+    );
+    labels[line.from] = {};
+    overflows[line.from] = Math.max(
+      0,
+      ...positions.map((label) => label.bottom + 2 - (bottom - top)),
+    );
+    for (const [index, label] of positions.entries()) {
+      const { bar, index: noteIndex } = localNotes[index]!;
+      const above = label.bottom <= bar.top;
+      const connectorTop = above ? label.bottom : bar.bottom;
+      const connectorBottom = above ? bar.top : label.top;
+      labels[line.from]![noteIndex] = {
+        label: { left: label.left - bar.left, top: label.top - bar.top },
+        connector: {
+          left: Math.max(bar.left, Math.min(bar.right, (label.left + label.right) / 2)) - bar.left,
+          top: connectorTop - bar.top,
+          height: Math.max(0, connectorBottom - connectorTop),
+        },
+      };
+    }
   }
-  return layouts;
+  return { labels, overflows };
 }

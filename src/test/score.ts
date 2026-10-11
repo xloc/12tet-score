@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { createPinia, type Pinia } from 'pinia';
-import type { Score } from '../music';
+import type { Meter, Note, Score } from '../music';
+import type { MusicSelection } from '../selection';
 import type { ScoreLine } from '../layout';
 import { useScoreStore } from '../stores/score';
 
@@ -14,7 +15,36 @@ export function createScoreStore(pinia: Pinia = createPinia()) {
   return sheet;
 }
 
-export const { totalTicks, ticksPerBar, barCount } = createScoreStore();
+export const { totalTicks, barCount } = createScoreStore();
+export const ticksPerBar = 1920;
+
+export function notationProps(options: {
+  notes: Note[];
+  ppq: number;
+  meters: Meter[];
+  totalTicks: number;
+  foldThreshold: number;
+  variableBarWidth: boolean;
+  playhead: number;
+  playing: boolean;
+  selection: MusicSelection;
+}) {
+  const { notes, ppq, meters, ...rest } = options;
+  return {
+    ...rest,
+    score: {
+      ...score,
+      notes,
+      ppq,
+      meters,
+      annotations: [],
+      chords: [],
+      pitchGuides: [],
+      pedals: [],
+      sections: [],
+    },
+  };
+}
 
 // Fixed browser-size fixtures for geometry tests; no flex allocation is simulated.
 export function fixedGeometry(

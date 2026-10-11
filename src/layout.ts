@@ -1,4 +1,5 @@
-import { pitchLabel, type Note } from './music';
+import { pitchLabel, type Meter, type Note, type Section } from './music';
+import { scoreBars } from './timing';
 
 export type PitchRow = number | { from: number; to: number };
 
@@ -7,6 +8,8 @@ export type ScoreBar = {
   to: number;
   minimum: number;
   preferred: number;
+  number: number;
+  meter: string;
   notes: { note: Note; index: number }[];
   beats: { from: number; to: number; number: number; bar: number }[];
 };
@@ -23,7 +26,8 @@ export type ScoreLine = {
 
 export type ScoreLayout = {
   ppq: number;
-  ticksPerBar: number;
+  meters: Meter[];
+  sections?: Section[];
   width: number;
   rem: number;
   foldThreshold: number;
@@ -51,62 +55,83 @@ export function pitchRows(pitches: number[], foldThreshold: number): PitchRow[] 
 export function scoreLines(
   notes: Note[],
   totalTicks: number,
-  { ppq, ticksPerBar, width: viewportWidth, rem, foldThreshold, variableBarWidth }: ScoreLayout,
+  {
+    ppq,
+    meters,
+    sections = [],
+    width: viewportWidth,
+    rem,
+    foldThreshold,
+    variableBarWidth,
+  }: ScoreLayout,
 ): ScoreLine[] {
   const indexedNotes = notes.map((note, index) => ({ note, index }));
+  const [numerator, denominator] = meters[0]!.meter.split('/').map(Number);
+  const ticksPerBar = (ppq * numerator! * 4) / denominator!;
   const normalWidth = (ticksPerBar / ppq) * 8 * rem;
   const availableWidth = viewportWidth || normalWidth;
   const barsPerLine = Math.max(1, Math.floor(availableWidth / normalWidth));
-  const bars = Array.from({ length: Math.ceil(totalTicks / ticksPerBar) }, (_, index) => {
-    const from = index * ticksPerBar;
-    const to = Math.min(from + ticksPerBar, totalTicks);
-    const duration = to - from;
-    const barNotes = indexedNotes.filter(({ note }) => note.at < to && note.at + note.len > from);
-    const beats = Array.from({ length: Math.ceil(duration / ppq) }, (_, beat) => ({
-      from: from + beat * ppq,
-      to: Math.min(from + (beat + 1) * ppq, to),
-      bar: index + 1,
-      number: beat + 1,
-    }));
-    if (!variableBarWidth) {
-      const width = (duration / ticksPerBar) * (availableWidth / barsPerLine);
-      return { from, to, minimum: width, preferred: width, notes: barNotes, beats };
-    }
-    const sounding = barNotes.map(({ note }) => note);
-    const events = [
-      ...new Set([
-        from,
-        to,
-        ...sounding.flatMap((note) => [Math.max(from, note.at), Math.min(to, note.at + note.len)]),
-      ]),
-    ].sort((a, b) => a - b);
-    const shortest = Math.min(...events.slice(1).map((at, index) => at - events[index]!));
-    const minimum = Math.max(
-      (duration / ppq) * 1.5 * rem,
-      (duration / shortest) * 1.5 * rem,
-      ...sounding.map(
-        (note) =>
-          (duration / Math.min(note.len, duration)) *
-          (pitchLabel(note.pitch).length * 0.5 + 0.25) *
-          rem,
-      ),
-    );
-    const preferred = Math.max(
-      minimum,
-      (duration / ppq) * 2 * rem,
-      (duration / shortest) * 2 * rem,
-    );
-    return { from, to, minimum, preferred, notes: barNotes, beats };
-  });
+  const bars = scoreBars(totalTicks, ppq, meters, sections).map(
+    ({ from, to, number, meter, beatTicks }) => {
+      const duration = to - from;
+      const barNotes = indexedNotes.filter(({ note }) => note.at < to && note.at + note.len > from);
+      const beats = Array.from({ length: Math.ceil(duration / beatTicks) }, (_, beat) => ({
+        from: from + beat * beatTicks,
+        to: Math.min(from + (beat + 1) * beatTicks, to),
+        bar: number,
+        number: beat + 1,
+      }));
+      if (!variableBarWidth) {
+        const width = (duration / ticksPerBar) * (availableWidth / barsPerLine);
+        return {
+          from,
+          to,
+          number,
+          meter,
+          minimum: width,
+          preferred: width,
+          notes: barNotes,
+          beats,
+        };
+      }
+      const sounding = barNotes.map(({ note }) => note);
+      const events = [
+        ...new Set([
+          from,
+          to,
+          ...sounding.flatMap((note) => [
+            Math.max(from, note.at),
+            Math.min(to, note.at + note.len),
+          ]),
+        ]),
+      ].sort((a, b) => a - b);
+      const shortest = Math.min(...events.slice(1).map((at, index) => at - events[index]!));
+      const minimum = Math.max(
+        (duration / ppq) * 1.5 * rem,
+        (duration / shortest) * 1.5 * rem,
+        ...sounding.map(
+          (note) =>
+            (duration / Math.min(note.len, duration)) *
+            (pitchLabel(note.pitch).length * 0.5 + 0.25) *
+            rem,
+        ),
+      );
+      const preferred = Math.max(
+        minimum,
+        (duration / ppq) * 2 * rem,
+        (duration / shortest) * 2 * rem,
+      );
+      return { from, to, number, meter, minimum, preferred, notes: barNotes, beats };
+    },
+  );
   const groups: (typeof bars)[] = [];
   let group: typeof bars = [];
   let minimumWidth = 0;
   for (const bar of bars) {
     if (
       group.length &&
-      (variableBarWidth
-        ? minimumWidth + bar.minimum > availableWidth
-        : group.length === barsPerLine)
+      (minimumWidth + bar.minimum > availableWidth + 0.001 ||
+        sections.some((section) => section.at === bar.from))
     ) {
       groups.push(group);
       group = [];
@@ -122,7 +147,9 @@ export function scoreLines(
     const to = group.at(-1)!.to;
     const minimum = group.reduce((sum, bar) => sum + bar.minimum, 0);
     const maximum =
-      !variableBarWidth || index === groups.length - 1
+      !variableBarWidth ||
+      index === groups.length - 1 ||
+      sections.some((section) => section.at === groups[index + 1]?.[0]?.from)
         ? group.reduce((sum, bar) => sum + bar.preferred, 0)
         : undefined;
     const lineNotes = indexedNotes.filter(({ note }) => note.at < to && note.at + note.len > from);

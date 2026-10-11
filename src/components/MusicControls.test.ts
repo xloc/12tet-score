@@ -36,14 +36,19 @@ test('the variable bar width setting defaults to off and updates notation from s
   const sheet = createScoreStore(pinia);
   sheet.load({
     ...score,
+    annotations: [],
+    chords: [],
+    pitchGuides: [],
+    pedals: [],
+    sections: [],
     notes: [
       ...Array.from({ length: 16 }, (_, index) => ({
         pitch: 60,
         at: index * 120,
         len: 120,
-        voice: 1,
+        groups: ['rh', '1'],
       })),
-      { pitch: 72, at: 1920, len: 1920, voice: 2 },
+      { pitch: 72, at: 1920, len: 1920, groups: ['lh', '2'] },
     ],
   });
   expect(sheet.variableBarWidth).toBe(false);
@@ -135,12 +140,17 @@ test('the app renders a loaded score with its own timing and metadata', async ()
   const sheet = createScoreStore(pinia);
   sheet.load({
     ...score,
+    annotations: [],
+    chords: [],
+    pitchGuides: [],
+    pedals: [],
+    sections: [],
     title: 'Loaded piece',
     composer: 'Another composer',
     ppq: 240,
-    bpm: 90,
-    meter: [3, 4],
-    notes: [{ pitch: 72, at: 720, len: 720, voice: 1 }],
+    tempos: [{ at: 0, bpm: 90 }],
+    meters: [{ at: 0, meter: '3/4' }],
+    notes: [{ pitch: 72, at: 720, len: 720, groups: ['rh', '1'] }],
   });
   const html = await renderToString(createSSRApp(App).use(pinia));
   const scorePanel = html
@@ -167,7 +177,7 @@ test('the app renders a loaded score with its own timing and metadata', async ()
   expect(html).toContain('3/4');
   expect(textContent(html)).toContain('2 measures');
   expect(html).toContain('max="1440"');
-  expect(html).toContain('/ 6 beats');
+  expect(html).toContain('/ 6 quarter notes');
   sheet.selection = { kind: 'notes', indices: [0] };
   const selected = await renderToString(createSSRApp(MusicControls).use(pinia));
   expect(selected).toContain('C5');

@@ -4,6 +4,8 @@ import { Settings } from '@lucide/vue';
 import { storeToRefs } from 'pinia';
 import { chordNames } from '../chords';
 import { pitchLabel } from '../music';
+import { tempoAt } from '../timing';
+import { usePlaybackStore } from '../stores/playback';
 import { useScoreStore } from '../stores/score';
 import InfoPanel from './InfoPanel.vue';
 import MidiStatus from './MidiStatus.vue';
@@ -11,6 +13,13 @@ import SettingsDialog from './SettingsDialog.vue';
 
 const { score, barCount, selectedNotes, span } = storeToRefs(useScoreStore());
 const settings = useTemplateRef<InstanceType<typeof SettingsDialog>>('settings');
+const playback = usePlaybackStore();
+const meter = computed(
+  () => score.value?.meters.filter((meter) => meter.at <= playback.currentTick).at(-1)?.meter,
+);
+const tempo = computed(() =>
+  score.value ? tempoAt(score.value.tempos, playback.currentTick).bpm : 0,
+);
 const context = computed(() => {
   const notes = selectedNotes.value;
   if (notes.length === 1) return { label: 'NOTE', value: pitchLabel(notes[0]!.pitch) };
@@ -51,15 +60,15 @@ const context = computed(() => {
           <dt class="text-[10px] leading-3 text-slate-500">TEMPO</dt>
           <dd
             class="truncate leading-5 font-medium text-slate-900"
-            :title="`Default tempo: ${score.bpm} BPM`"
+            :title="`Score tempo at the playhead: ${tempo} BPM`"
           >
-            {{ score.bpm }} <span class="text-xs font-normal text-slate-500">BPM</span>
+            {{ tempo }} <span class="text-xs font-normal text-slate-500">BPM</span>
           </dd>
         </dl>
         <dl class="min-w-0">
           <dt class="text-[10px] leading-3 text-slate-500">METER</dt>
           <dd class="truncate leading-5 font-medium text-slate-900">
-            {{ score.meter.join('/') }}
+            {{ meter }}
           </dd>
         </dl>
       </template>

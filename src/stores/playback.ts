@@ -1,11 +1,12 @@
 import { computed, ref, watch } from 'vue';
 import { acceptHMRUpdate, defineStore } from 'pinia';
-import { seconds, type Note } from '../music.ts';
+import type { Note } from '../music.ts';
+import { secondsAt, tickAtSeconds } from '../timing';
 import { useScoreStore } from './score.ts';
 
 export const usePlaybackStore = defineStore('playback', () => {
   const sheet = useScoreStore();
-  const bpm = ref(sheet.score?.bpm ?? 0);
+  const bpm = ref(sheet.score?.tempos[0]?.bpm ?? 0);
   const status = ref<'stopped' | 'playing' | 'paused'>('stopped');
   const playing = computed(() => status.value === 'playing');
   const paused = computed(() => status.value === 'paused');
@@ -19,7 +20,7 @@ export const usePlaybackStore = defineStore('playback', () => {
     () => sheet.score,
     () => {
       stop();
-      bpm.value = sheet.score?.bpm ?? 0;
+      bpm.value = sheet.score?.tempos[0]?.bpm ?? 0;
     },
     { flush: 'sync' },
   );
@@ -75,7 +76,8 @@ export const usePlaybackStore = defineStore('playback', () => {
     session = undefined;
     if (from >= to) return;
     session = { notes, to };
-    const tempo = bpm.value;
+    const tempos = sheet.score.tempos;
+    const speed = bpm.value / tempos[0]!.bpm;
     const ppq = sheet.score.ppq;
     const context = new AudioContext();
     audio = context;
@@ -83,12 +85,14 @@ export const usePlaybackStore = defineStore('playback', () => {
     await context.resume();
     if (audio !== context) return;
     const origin = context.currentTime + 0.03;
-    const end = origin + seconds(to - from, tempo, ppq);
+    const fromSeconds = secondsAt(from, tempos, ppq, speed);
+    const end = origin + secondsAt(to, tempos, ppq, speed) - fromSeconds;
 
     for (const note of notes) {
       if (note.at >= to || note.at + note.len <= from) continue;
-      const start = origin + seconds(Math.max(note.at, from) - from, tempo, ppq);
-      const finish = origin + seconds(Math.min(note.at + note.len, to) - from, tempo, ppq);
+      const start = origin + secondsAt(Math.max(note.at, from), tempos, ppq, speed) - fromSeconds;
+      const finish =
+        origin + secondsAt(Math.min(note.at + note.len, to), tempos, ppq, speed) - fromSeconds;
       const attack = Math.min(0.005, (finish - start) / 2);
       const oscillator = context.createOscillator();
       const gain = context.createGain();
@@ -106,7 +110,7 @@ export const usePlaybackStore = defineStore('playback', () => {
     updateTick = () => {
       currentTick.value = Math.min(
         to,
-        from + ((Math.max(0, context.currentTime - origin) * tempo) / 60) * ppq,
+        tickAtSeconds(fromSeconds + Math.max(0, context.currentTime - origin), tempos, ppq, speed),
       );
     };
     function update() {

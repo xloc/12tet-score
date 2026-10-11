@@ -7,7 +7,7 @@ import { score, totalTicks, fixedGeometry, positionAtTick } from './test/score';
 
 const layout: ScoreLayout = {
   ppq: 480,
-  ticksPerBar: 1920,
+  meters: [{ at: 0, meter: '4/4' }],
   width: 512,
   rem: 16,
   foldThreshold: 12,
@@ -17,19 +17,19 @@ const dense: Note[] = Array.from({ length: 16 }, (_, index) => ({
   pitch: 60,
   at: index * 120,
   len: 120,
-  voice: 1,
+  groups: ['rh', '1'],
 }));
 const chord: Note[] = [60, 64, 67, 72, 76].map((pitch) => ({
   pitch,
   at: 1920,
   len: 1920,
-  voice: 2,
+  groups: ['lh', '2'],
 }));
 
 test('a held chord and a silent bar are narrower than dense rhythm regardless of chord size', () => {
   const widths = [
     [],
-    [{ pitch: 60, at: 0, len: 1920, voice: 1 }],
+    [{ pitch: 60, at: 0, len: 1920, groups: ['rh', '1'] }],
     chord.map((note) => ({ ...note, at: 0 })),
     dense,
   ].map((notes) => scoreLines(notes, 1920, { ...layout, width: 2048 })[0]!.maximum);
@@ -41,7 +41,7 @@ test('bar widths vary continuously with rhythm and are independent of tick resol
     pitch: 60,
     at: index * 320,
     len: 320,
-    voice: 1,
+    groups: ['rh', '1'],
   }));
   assert.equal(scoreLines(notes, 1920, layout)[0]!.maximum, 192);
   assert.equal(
@@ -51,7 +51,7 @@ test('bar widths vary continuously with rhythm and are independent of tick resol
       {
         ...layout,
         ppq: 240,
-        ticksPerBar: 960,
+        meters: [{ at: 0, meter: '4/4' }],
       },
     )[0]!.maximum,
     192,
@@ -111,7 +111,7 @@ test('seeking and range placement share the nonuniform playback time mapping', (
 });
 
 test('a note spanning unequal bars has contiguous fragments with proportional time inside each bar', () => {
-  const held = { pitch: 48, at: 1440, len: 2400, voice: 3 };
+  const held = { pitch: 48, at: 1440, len: 2400, groups: ['lh', '3'] };
   const line = scoreLines([...dense, ...chord, held], 3840, layout)[0]!;
   const geometry = fixedGeometry(line, [409.6, 102.4]);
   const first = notePlacement(held, line, line.bars[0]!);
@@ -129,7 +129,7 @@ test('a note spanning unequal bars has contiguous fragments with proportional ti
 });
 
 test('a single brief note retains readable length and label space on a narrow screen', () => {
-  const note = { pitch: 61, at: 0, len: 120, voice: 1 };
+  const note = { pitch: 61, at: 0, len: 120, groups: ['rh', '1'] };
   const line = scoreLines([note], 1920, { ...layout, width: 200 })[0]!;
   assert.equal(line.minimum, 448);
   const geometry = fixedGeometry(line, [448]);
@@ -143,7 +143,7 @@ test('the final held chord keeps its compact width and fractional note times ret
   const lines = scoreLines(notes, 3840, { ...layout, width: 450 });
   assert.equal(lines.length, 2);
   assert.equal(lines[1]!.maximum, 128);
-  const note = { pitch: 60, at: 17, len: 83, voice: 1 };
+  const note = { pitch: 60, at: 17, len: 83, groups: ['rh', '1'] };
   const line = scoreLines([note], 100, layout)[0]!;
   assert.equal(line.to, 100);
   assert.equal(line.bars[0]!.beats.length, 1);
@@ -152,7 +152,7 @@ test('the final held chord keeps its compact width and fractional note times ret
 });
 
 test('resizing preserves all score time, bar boundaries, held-note identity, and pitch folding', () => {
-  const held = { pitch: 36, at: 1440, len: 960, voice: 3 };
+  const held = { pitch: 36, at: 1440, len: 960, groups: ['lh', '3'] };
   const notes = [
     ...dense,
     ...chord,

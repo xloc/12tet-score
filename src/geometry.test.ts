@@ -6,21 +6,21 @@ import { boxHits, tickAtPoint } from './selection';
 import type { Note } from './music';
 
 function fixture() {
-  const held: Note = { pitch: 60, at: 1440, len: 2880, voice: 3 };
+  const held: Note = { pitch: 60, at: 1440, len: 2880, groups: ['lh', '3'] };
   const notes = [
-    { pitch: 60, at: 2400, len: 960, voice: 2 },
+    { pitch: 60, at: 2400, len: 960, groups: ['lh', '2'] },
     held,
     ...Array.from({ length: 16 }, (_, index) => ({
       pitch: 76,
       at: index * 120,
       len: 120,
-      voice: 1,
+      groups: ['rh', '1'],
     })),
-    { pitch: 72, at: 3840, len: 120, voice: 1 },
+    { pitch: 72, at: 3840, len: 120, groups: ['rh', '1'] },
   ];
   const lines = scoreLines(notes, 5760, {
     ppq: 480,
-    ticksPerBar: 1920,
+    meters: [{ at: 0, meter: '4/4' }],
     width: 512,
     rem: 16,
     foldThreshold: 0,
@@ -56,7 +56,13 @@ function fixture() {
         } as unknown as HTMLElement);
       }
       return {
-        getBoundingClientRect: () => ({ left: barLeft, right: barLeft + width, width }),
+        getBoundingClientRect: () => ({
+          left: barLeft,
+          right: barLeft + width,
+          width,
+          top: origin.top + lineTop,
+          bottom: origin.top + lineTop + height,
+        }),
       } as unknown as HTMLElement;
     });
     return {
@@ -65,6 +71,13 @@ function fixture() {
         right: left,
         top: origin.top + lineTop,
         bottom: origin.top + lineTop + height,
+      }),
+      querySelector: () => ({
+        getBoundingClientRect: () => ({
+          left: origin.left,
+          top: origin.top + lineTop,
+          width: left - origin.left,
+        }),
       }),
       querySelectorAll: (selector: string) => (selector === '[data-score-bar]' ? bars : fragments),
     } as unknown as HTMLElement;
@@ -124,15 +137,26 @@ test('label placement retains original note order and full spans after fragment 
   expect(measured.slice(0, lines[0]!.notes.length).map((note) => note.index)).toEqual(
     lines[0]!.notes.map((note) => note.index),
   );
-  const expected = placePitchLabels(
-    measured.map((note) => ({ ...note, width: 32, height: 16 })),
-    512,
-    surface.getBoundingClientRect().height,
-  );
   const actual = layoutPitchLabels(surface, lines);
-  for (const [index, note] of measured.entries()) {
-    const position = actual[note.lineFrom]![note.index]!;
-    expect(position.label.left + note.bar.left).toBe(expected[index]!.left);
-    expect(position.label.top + note.bar.top).toBe(expected[index]!.top);
+  const geometry = measureTimeLines(surface, lines);
+  for (const line of geometry) {
+    const notes = measured
+      .filter((note) => note.lineFrom === line.from)
+      .map((note) => ({
+        ...note,
+        width: 32,
+        height: 16,
+        bar: { ...note.bar, top: note.bar.top - line.top, bottom: note.bar.bottom - line.top },
+      }));
+    const expected = placePitchLabels(notes, 512, line.bottom - line.top, [], true);
+    for (const [index, note] of notes.entries()) {
+      const position = actual.labels[note.lineFrom]![note.index]!;
+      expect(position.label.left + note.bar.left).toBe(expected[index]!.left);
+      expect(position.label.top + note.bar.top).toBe(expected[index]!.top);
+      expect(expected[index]!.top).toBeGreaterThanOrEqual(0);
+      expect(expected[index]!.bottom).toBeLessThanOrEqual(
+        line.bottom - line.top + actual.overflows[line.from]!,
+      );
+    }
   }
 });

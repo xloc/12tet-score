@@ -85,7 +85,7 @@ test('playback speed displays its override separately from the score tempo', asy
   const html = await renderToString(createSSRApp(SettingsDialog).use(pinia));
   expect(html).toContain('Playback speed');
   expect(html.match(/<input\b[^>]*id="tempo"[^>]*>/)![0]).toContain('value="80"');
-  expect(sheet.score!.bpm).toBe(score.bpm);
+  expect(sheet.score!.tempos[0]!.bpm).toBe(score.tempos[0]!.bpm);
 });
 
 test('MIDI details list device states and the complete pressed-pitch list', async () => {

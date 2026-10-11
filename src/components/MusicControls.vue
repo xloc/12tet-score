@@ -66,7 +66,7 @@ async function goToStart() {
         <div class="font-medium text-slate-900 tabular-nums">
           {{ (playback.currentTick / score.ppq).toFixed(1) }}
           <span class="text-xs font-normal text-slate-500"
-            >/ {{ totalTicks / score.ppq }} beats</span
+            >/ {{ totalTicks / score.ppq }} quarter notes</span
           >
         </div>
         <progress

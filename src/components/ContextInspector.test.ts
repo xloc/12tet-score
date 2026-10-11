@@ -17,7 +17,11 @@ function textContent(html: string) {
     .trim();
 }
 
-async function renderInfo(selection: MusicSelection, bpm = score.bpm, next: Score = score) {
+async function renderInfo(
+  selection: MusicSelection,
+  bpm = score.tempos[0]!.bpm,
+  next: Score = score,
+) {
   const pinia = createPinia();
   const sheet = useScoreStore(pinia);
   sheet.load(next);
@@ -36,8 +40,8 @@ test('no selection shows whole-piece context using the score default tempo', asy
   const { panel, fields } = await renderInfo({ kind: 'notes', indices: [] }, 80);
   expect(fields).toEqual([
     `WHOLE PIECE: ${barCount} measures`,
-    `TEMPO: ${score.bpm} BPM`,
-    `METER: ${score.meter.join('/')}`,
+    `TEMPO: ${score.tempos[0]!.bpm} BPM`,
+    `METER: ${score.meters[0]!.meter}`,
   ]);
   expect(panel).not.toContain('80 BPM');
   expect(panel).not.toContain('KEY');
@@ -73,13 +77,17 @@ test('unrecognized pitch sets show only the selection count', async () => {
 });
 
 test('an empty time range remains in selection mode', async () => {
-  const { panel, fields } = await renderInfo({ kind: 'range', from: 480, to: 960 }, score.bpm, {
-    ...score,
-    notes: [
-      { pitch: 60, at: 0, len: 480, voice: 1 },
-      { pitch: 64, at: 1920, len: 480, voice: 1 },
-    ],
-  });
+  const { panel, fields } = await renderInfo(
+    { kind: 'range', from: 480, to: 960 },
+    score.tempos[0]!.bpm,
+    {
+      ...score,
+      notes: [
+        { pitch: 60, at: 0, len: 480, groups: ['rh', '1'] },
+        { pitch: 64, at: 1920, len: 480, groups: ['rh', '1'] },
+      ],
+    },
+  );
   expect(fields).toEqual(['SELECTED: 0 notes']);
   expect(panel).not.toContain('WHOLE PIECE');
 });

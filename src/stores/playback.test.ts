@@ -91,15 +91,15 @@ function advance(context: TestAudioContext, time: number) {
   for (const callback of callbacks) callback(time * 1000);
 }
 
-const held: Note = { pitch: 60, at: 0, len: 1920, voice: 1 };
+const held: Note = { pitch: 60, at: 0, len: 1920, groups: ['rh', '1'] };
 
 test('playback from a moved playhead clips held notes and excludes notes outside the interval', async () => {
   await playback.play(
     [
-      { pitch: 60, at: 0, len: 480, voice: 1 },
-      { pitch: 64, at: 0, len: 960, voice: 2 },
-      { pitch: 67, at: 720, len: 480, voice: 3 },
-      { pitch: 72, at: 1440, len: 480, voice: 1 },
+      { pitch: 60, at: 0, len: 480, groups: ['rh', '1'] },
+      { pitch: 64, at: 0, len: 960, groups: ['lh', '2'] },
+      { pitch: 67, at: 720, len: 480, groups: ['lh', '3'] },
+      { pitch: 72, at: 1440, len: 480, groups: ['rh', '1'] },
     ],
     480,
     1440,
@@ -247,10 +247,15 @@ test('loading another score resets active and paused playback and uses the new t
     sheet.selection = { kind: 'notes', indices: [0] };
     sheet.load({
       ...score,
+      annotations: [],
+      chords: [],
+      pitchGuides: [],
+      pedals: [],
+      sections: [],
       ppq: 240,
-      bpm: 120,
-      meter: [3, 4],
-      notes: [{ pitch: 72, at: 0, len: 720, voice: 1 }],
+      tempos: [{ at: 0, bpm: 120 }],
+      meters: [{ at: 0, meter: '3/4' }],
+      notes: [{ pitch: 72, at: 0, len: 720, groups: ['rh', '1'] }],
     });
     expect(playback.status).toBe('stopped');
     expect(playback.currentTick).toBe(0);
@@ -283,7 +288,13 @@ test('loading a score during audio startup prevents the old piece from being sch
       }),
   );
   const starting = playback.play([held], 0, 1920);
-  sheet.load({ ...score, bpm: 90, notes: [{ ...held, pitch: 72, len: 480 }] });
+  sheet.load({
+    ...score,
+    tempos: [{ at: 0, bpm: 90 }],
+    annotations: [],
+    chords: [],
+    notes: [{ ...held, pitch: 72, len: 480 }],
+  });
   ready();
   await starting;
   expect(playback.status).toBe('stopped');
@@ -292,4 +303,32 @@ test('loading a score during audio startup prevents the old piece from being sch
   expect(contexts[0]!.closes).toBe(1);
   expect(contexts[0]!.oscillators).toHaveLength(0);
   expect(frames.size).toBe(0);
+});
+
+test('held notes and the playhead follow tempo changes, including pause and resume', async () => {
+  sheet.load({
+    ...score,
+    annotations: [],
+    chords: [],
+    pitchGuides: [],
+    pedals: [],
+    sections: [],
+    tempos: [
+      { at: 0, bpm: 60 },
+      { at: 960, bpm: 120 },
+    ],
+    notes: [held],
+  });
+  await playback.play([held], 0, 1920);
+  const context = contexts[0]!;
+  expect(context.oscillators[0]!.finishes[0]).toBeCloseTo(3.03);
+  advance(context, 2.53);
+  expect(playback.currentTick).toBeCloseTo(1440);
+  playback.pause();
+  playback.bpm = 120;
+  await playback.resume();
+  const resumed = contexts[1]!;
+  expect(resumed.oscillators[0]!.finishes[0]).toBeCloseTo(0.28);
+  advance(resumed, 0.155);
+  expect(playback.currentTick).toBeCloseTo(1680);
 });

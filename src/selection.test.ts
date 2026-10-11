@@ -15,10 +15,10 @@ import {
 
 const empty: MusicSelection = { kind: 'notes', indices: [] };
 const notes: Note[] = [
-  { pitch: 60, at: 0, len: 960, voice: 1 },
-  { pitch: 64, at: 240, len: 120, voice: 2 },
-  { pitch: 67, at: 360, len: 120, voice: 2 },
-  { pitch: 72, at: 960, len: 480, voice: 1 },
+  { pitch: 60, at: 0, len: 960, groups: ['rh', '1'] },
+  { pitch: 64, at: 240, len: 120, groups: ['lh', '2'] },
+  { pitch: 67, at: 360, len: 120, groups: ['lh', '2'] },
+  { pitch: 72, at: 960, len: 480, groups: ['rh', '1'] },
 ];
 
 test('time selection follows wrapped lines, including a shorter final line', () => {
@@ -123,13 +123,18 @@ test('the opening arpeggio suggests C major despite repeats, register, and order
 });
 
 test('ambiguous chord sets keep their alternative names', () => {
-  const pitches = [60, 64, 67, 69].map((pitch) => ({ pitch, at: 0, len: 480, voice: 1 }));
+  const pitches = [60, 64, 67, 69].map((pitch) => ({
+    pitch,
+    at: 0,
+    len: 480,
+    groups: ['rh', '1'],
+  }));
   assert.deepEqual(chordNames(pitches), ['C6', 'Am7/C']);
 });
 
 test('chord inversions use the lowest MIDI pitch without changing the source note order', () => {
   const pitches = [62, 57, 60, 54];
-  const notes = pitches.map((pitch) => ({ pitch, at: 0, len: 480, voice: 1 }));
+  const notes = pitches.map((pitch) => ({ pitch, at: 0, len: 480, groups: ['rh', '1'] }));
   assert.deepEqual(chordNames(notes), ['D7/F#']);
   assert.deepEqual(chordNames([...notes].reverse()), ['D7/F#']);
   assert.deepEqual(
@@ -139,7 +144,12 @@ test('chord inversions use the lowest MIDI pitch without changing the source not
 });
 
 test('chord detection supports extensions and converts sharp MIDI pitches', () => {
-  const notes = [48, 52, 55, 58, 62].map((pitch) => ({ pitch, at: 0, len: 480, voice: 1 }));
+  const notes = [48, 52, 55, 58, 62].map((pitch) => ({
+    pitch,
+    at: 0,
+    len: 480,
+    groups: ['rh', '1'],
+  }));
   assert.deepEqual(chordNames(notes), ['C9']);
   assert.deepEqual(chordNames(notes.map((note) => ({ ...note, pitch: note.pitch + 1 }))), ['C#9']);
 });

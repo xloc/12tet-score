@@ -6,11 +6,15 @@ import { useScoreStore } from './score';
 
 const next: Score = {
   ...initialScore,
+  chords: [],
+  pitchGuides: [],
+  pedals: [],
+  sections: [],
   title: 'Loaded piece',
   ppq: 240,
-  bpm: 90,
-  meter: [3, 4],
-  notes: [{ pitch: 72, at: 720, len: 720, voice: 1 }],
+  tempos: [{ at: 0, bpm: 90 }],
+  meters: [{ at: 0, meter: '3/4' }],
+  notes: [{ pitch: 72, at: 720, len: 720, groups: ['rh', '1'] }],
   annotations: [],
 };
 
@@ -20,7 +24,7 @@ test('replacing the score updates timing and resets selection while retaining la
   const sheet = useScoreStore(createPinia());
   expect(sheet.score).toBeNull();
   expect(sheet.totalTicks).toBe(0);
-  expect(sheet.ticksPerBar).toBe(0);
+  expect(sheet.bars).toEqual([]);
   expect(sheet.barCount).toBe(0);
   expect(sheet.selectedNotes).toEqual([]);
   expect(sheet.span).toBeNull();
@@ -32,7 +36,7 @@ test('replacing the score updates timing and resets selection while retaining la
   sheet.load(next);
   expect(sheet.score).toEqual(next);
   expect(sheet.totalTicks).toBe(1440);
-  expect(sheet.ticksPerBar).toBe(720);
+  expect(sheet.bars[0]!.to).toBe(720);
   expect(sheet.barCount).toBe(2);
   expect(sheet.selection).toEqual({ kind: 'notes', indices: [] });
   expect(sheet.selectedNotes).toEqual([]);
@@ -114,7 +118,7 @@ test('startup fetches the public catalog and loads its first entry without a har
   expect(sheet.error).toBe('');
   expect(sheet.score).toEqual(initialScore);
   expect(sheet.totalTicks).toBe(67200);
-  expect(sheet.ticksPerBar).toBe(1920);
+  expect(sheet.bars[0]!.to).toBe(1920);
   expect(sheet.barCount).toBe(35);
 });
 
