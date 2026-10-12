@@ -9,6 +9,7 @@ import {
 } from '../layout';
 import { pitchLabel, type Note, type NoteGroup, type PitchGuide } from '../music';
 import { groupAppearance } from '../groups';
+import MidiPitchOverlay from './MidiPitchOverlay.vue';
 
 const props = defineProps<{
   bar: ScoreBar;
@@ -17,6 +18,7 @@ const props = defineProps<{
   selected: Set<number>;
   range: { from: number; to: number } | null;
   playhead: number | undefined;
+  pressedPitches?: number[];
   labels: Record<number, PitchLabelLayout>;
   groups: NoteGroup[];
   pitchGuides: PitchGuide[];
@@ -123,6 +125,11 @@ function hasLabel(note: Note) {
         :title="guide.text"
       ></span>
     </span>
+    <MidiPitchOverlay
+      v-if="playhead !== undefined"
+      :rows="line.rows"
+      :pitches="pressedPitches ?? []"
+    />
     <span
       v-if="playhead !== undefined"
       data-playhead

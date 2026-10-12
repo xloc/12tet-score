@@ -1,39 +1,64 @@
 import { readFileSync, readdirSync } from 'node:fs';
+import { basename, dirname, join } from 'node:path';
 import tailwindcss from '@tailwindcss/vite';
 import vue from '@vitejs/plugin-vue';
 import { defineConfig, type Plugin } from 'vite-plus';
 import type { Score, ScoreEntry } from './src/music';
 
-function scoreCatalog() {
-  const directory = new URL('./public/scores/', import.meta.url);
+function scoreCatalog(directory: string) {
   const entries: ScoreEntry[] = readdirSync(directory, { withFileTypes: true })
     .filter((entry) => entry.isFile() && entry.name.endsWith('.json'))
     .map((entry) => entry.name)
     .sort()
     .map((file) => {
-      const { title, composer }: Score = JSON.parse(readFileSync(new URL(file, directory), 'utf8'));
+      const { title, composer }: Score = JSON.parse(readFileSync(join(directory, file), 'utf8'));
       return { file, title, composer };
     });
   return JSON.stringify(entries, null, 2);
 }
 
-const scoreCatalogPlugin: Plugin = {
-  name: 'score-catalog',
-  configureServer(server) {
-    server.middlewares.use((request, response, next) => {
-      if (request.url?.split('?')[0] !== `${server.config.base}scores/index.json`) return next();
-      response.setHeader('Content-Type', 'application/json');
-      response.end(scoreCatalog());
-    });
-  },
-  generateBundle() {
-    this.emitFile({ type: 'asset', fileName: 'scores/index.json', source: scoreCatalog() });
-  },
-};
+export function scoreCatalogPlugin(): Plugin {
+  let directory = '';
+  return {
+    name: 'score-catalog',
+    configResolved(config) {
+      directory = join(config.publicDir, 'scores');
+    },
+    configureServer(server) {
+      server.middlewares.use((request, response, next) => {
+        if (request.url?.split('?')[0] !== `${server.config.base}scores/index.json`) return next();
+        response.setHeader('Content-Type', 'application/json');
+        response.setHeader('Cache-Control', 'no-cache');
+        response.end(scoreCatalog(directory));
+      });
+    },
+    hotUpdate({ file }) {
+      if (
+        this.environment.name !== 'client' ||
+        dirname(file) !== directory ||
+        !file.endsWith('.json')
+      )
+        return;
+      this.environment.hot.send({
+        type: 'custom',
+        event: 'score-updated',
+        data: { file: basename(file) },
+      });
+      return [];
+    },
+    generateBundle() {
+      this.emitFile({
+        type: 'asset',
+        fileName: 'scores/index.json',
+        source: scoreCatalog(directory),
+      });
+    },
+  };
+}
 
 export default defineConfig({
   base: './',
-  plugins: [vue(), tailwindcss(), scoreCatalogPlugin],
+  plugins: [vue(), tailwindcss(), scoreCatalogPlugin()],
   test: {
     include: ['src/**/*.test.ts'],
   },

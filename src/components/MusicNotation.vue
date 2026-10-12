@@ -33,6 +33,7 @@ const props = defineProps<{
   foldThreshold: number;
   variableBarWidth: boolean;
   playhead: number;
+  pressedPitches?: number[];
   playing: boolean;
   selection: MusicSelection;
 }>();
@@ -204,7 +205,7 @@ function clearSelection() {
 </script>
 
 <template>
-  <div ref="viewport" class="min-h-0 scroll-pb-32 overflow-auto">
+  <div ref="viewport" class="mx-2 min-h-0 scroll-pb-32 overflow-auto">
     <div
       ref="surface"
       class="relative grid w-full grid-cols-1 touch-pan-y touch-pinch-zoom gap-y-6 pt-4 pb-32 select-none"
@@ -260,6 +261,11 @@ function clearSelection() {
             :playhead="
               line.from === playheadLine?.from && bar.from === playheadBar?.from
                 ? playhead
+                : undefined
+            "
+            :pressed-pitches="
+              line.from === playheadLine?.from && bar.from === playheadBar?.from
+                ? pressedPitches
                 : undefined
             "
             :labels="labelLayouts.labels[line.from] ?? {}"

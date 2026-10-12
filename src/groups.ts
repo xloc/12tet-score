@@ -12,7 +12,7 @@ export function groupAppearance(ids: string[], groups: NoteGroup[]) {
     backgroundColor: color,
     backgroundImage:
       hand?.kind === 'hand' && hand.hand === 'right'
-        ? 'repeating-linear-gradient(45deg, transparent 0 11px, rgb(255 255 255 / 0.65) 11px 12px)'
+        ? 'repeating-linear-gradient(45deg, transparent 0 11px, rgb(255 255 255 / 0.65) 11px 13px)'
         : undefined,
   };
 }

@@ -1,11 +1,26 @@
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { acceptHMRUpdate, defineStore } from 'pinia';
 import { scoreDuration, type Score, type ScoreEntry } from '../music.ts';
 import { scoreBars, validateTempos } from '../timing';
 import { selectedIndices, selectionSpan, type MusicSelection } from '../selection.ts';
 
+type OpenedScore = { file: string } | { score: Score };
+const savedScoreVersion = 1;
+
 export const useScoreStore = defineStore('score', () => {
+  let saved: {
+    version?: number;
+    opened?: OpenedScore | null;
+    foldThreshold?: number;
+    variableBarWidth?: boolean;
+  } = {};
+  try {
+    saved = JSON.parse(globalThis.localStorage?.getItem('music-sheet-state') ?? '{}') ?? {};
+  } catch {
+    // Unavailable storage or invalid saved JSON leaves the defaults in place.
+  }
   const score = ref<Score | null>(null);
+  const opened = ref<OpenedScore | null>(null);
   const catalog = ref<ScoreEntry[]>([]);
   const loading = ref(false);
   const error = ref('');
@@ -16,8 +31,8 @@ export const useScoreStore = defineStore('score', () => {
       : [],
   );
   const barCount = computed(() => bars.value.length);
-  const foldThreshold = ref(12);
-  const variableBarWidth = ref(false);
+  const foldThreshold = ref(saved.foldThreshold ?? 12);
+  const variableBarWidth = ref(saved.variableBarWidth ?? false);
   const selection = ref<MusicSelection>({ kind: 'notes', indices: [] });
   const selectedNotes = computed(() =>
     score.value
@@ -29,53 +44,113 @@ export const useScoreStore = defineStore('score', () => {
   const span = computed(() =>
     score.value ? selectionSpan(score.value.notes, selection.value) : null,
   );
+  let request = 0;
 
-  function load(next: Score) {
+  watch(
+    [opened, foldThreshold, variableBarWidth],
+    () => {
+      try {
+        globalThis.localStorage?.setItem(
+          'music-sheet-state',
+          JSON.stringify({
+            version: savedScoreVersion,
+            opened: opened.value,
+            foldThreshold: foldThreshold.value,
+            variableBarWidth: variableBarWidth.value,
+          }),
+        );
+      } catch {
+        // Storage may be disabled or full; the current sheet remains usable.
+      }
+    },
+    { flush: 'sync' },
+  );
+
+  function load(next: Score, file?: string) {
     if (!Number.isFinite(next.ppq) || next.ppq <= 0) throw new Error('PPQ must be positive.');
     validateTempos(next.tempos);
     scoreBars(scoreDuration(next), next.ppq, next.meters, next.sections);
     selection.value = { kind: 'notes', indices: [] };
     score.value = next;
+    opened.value = file ? { file } : { score: next };
   }
 
-  async function readScore(read: () => Promise<void>) {
+  async function readScore(read: (current: () => boolean) => Promise<void>) {
+    const id = ++request;
+    const current = () => id === request;
     loading.value = true;
     error.value = '';
     try {
-      await read();
-      return true;
+      await read(current);
+      return current();
     } catch (cause) {
-      error.value = cause instanceof Error ? cause.message : String(cause);
+      if (current()) error.value = cause instanceof Error ? cause.message : String(cause);
       return false;
     } finally {
-      loading.value = false;
+      if (current()) loading.value = false;
     }
   }
 
   function loadFile(file: File) {
-    return readScore(async () => {
+    return readScore(async (current) => {
       if (!/\.json$/i.test(file.name) && file.type !== 'application/json') {
         throw new Error('Choose a JSON score file.');
       }
-      load(JSON.parse(await file.text()));
+      const next = JSON.parse(await file.text());
+      if (current()) load(next);
     });
   }
 
   async function readJSON<T>(file: string): Promise<T> {
-    const response = await fetch(`${import.meta.env.BASE_URL}scores/${file}`);
+    const response = await fetch(`${import.meta.env.BASE_URL}scores/${file}`, {
+      cache: 'no-cache',
+    });
     if (!response.ok) throw new Error(`Could not load score (${response.status}).`);
     return response.json();
   }
 
   function loadHosted(file: string) {
-    return readScore(async () => load(await readJSON<Score>(file)));
+    return readScore(async (current) => {
+      const next = await readJSON<Score>(file);
+      if (current()) load(next, file);
+    });
+  }
+
+  async function refreshHosted(file: string) {
+    if (!opened.value || !('file' in opened.value) || opened.value.file !== file) return false;
+    return readScore(async (current) => {
+      const next = await readJSON<Score>(file);
+      if (current() && opened.value && 'file' in opened.value && opened.value.file === file)
+        load(next, file);
+    });
   }
 
   function initialize() {
-    return readScore(async () => {
-      catalog.value = await readJSON<ScoreEntry[]>('index.json');
-      if (!score.value && catalog.value.length) {
-        load(await readJSON<Score>(catalog.value[0]!.file));
+    return readScore(async (current) => {
+      if (
+        !score.value &&
+        saved.version === savedScoreVersion &&
+        saved.opened &&
+        'score' in saved.opened
+      ) {
+        try {
+          load(saved.opened.score);
+        } catch {
+          // A saved score that no longer loads falls back to the public catalog.
+        }
+      }
+      const entries = await readJSON<ScoreEntry[]>('index.json');
+      if (!current()) return;
+      catalog.value = entries;
+      if (!score.value) {
+        const file =
+          saved.version === savedScoreVersion && saved.opened && 'file' in saved.opened
+            ? saved.opened.file
+            : catalog.value[0]?.file;
+        if (file) {
+          const next = await readJSON<Score>(file);
+          if (current()) load(next, file);
+        }
       }
     });
   }
@@ -96,6 +171,7 @@ export const useScoreStore = defineStore('score', () => {
     load,
     loadFile,
     loadHosted,
+    refreshHosted,
     initialize,
   };
 });

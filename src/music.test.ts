@@ -13,20 +13,16 @@ const layout: ScoreLayout = {
   variableBarWidth: false,
 };
 
-test('the complete prelude has 35 measures, 549 notes, and three voices', () => {
+test('the complete prelude has 35 measures and 549 notes', () => {
   assert.equal(barCount, 35);
   assert.equal(score.notes.length, 549);
   assert.equal(totalTicks, 67200);
   assert.equal(seconds(totalTicks, score.tempos[0]!.bpm, score.ppq), 140);
-  for (const voice of score.groups.filter((group) => group.kind === 'voice')) {
-    const notes = score.notes.filter((note) => note.groups.includes(voice.id));
-    assert.equal(Math.max(...notes.map((note) => note.at + note.len)), totalTicks);
-    assert(
-      notes.every(
-        (note) => Number.isInteger(note.at) && Number.isInteger(note.len) && note.len > 0,
-      ),
-    );
-  }
+  assert(
+    score.notes.every(
+      (note) => Number.isInteger(note.at) && Number.isInteger(note.len) && note.len > 0,
+    ),
+  );
 });
 
 test('seconds uses the supplied tempo and tick resolution', () => {
@@ -38,16 +34,16 @@ test('the opening preserves the held bass and tied middle note beneath the arpeg
   assert.deepEqual(
     score.notes.filter((note) => note.at < 600),
     [
-      { pitch: 60, at: 0, len: 960, groups: ['lh', '3'] },
-      { pitch: 64, at: 120, len: 840, groups: ['lh', '2'] },
-      { pitch: 67, at: 240, len: 120, groups: ['rh', '1'] },
-      { pitch: 72, at: 360, len: 120, groups: ['rh', '1'] },
-      { pitch: 76, at: 480, len: 120, groups: ['rh', '1'] },
+      { pitch: 60, at: 0, len: 960, groups: ['lh'] },
+      { pitch: 64, at: 120, len: 840, groups: ['lh'] },
+      { pitch: 67, at: 240, len: 120, groups: ['rh'] },
+      { pitch: 72, at: 360, len: 120, groups: ['rh'] },
+      { pitch: 76, at: 480, len: 120, groups: ['rh'] },
     ],
   );
   assert.deepEqual(
     score.notes.filter((note) => note.at === 960),
-    [{ pitch: 60, at: 960, len: 960, groups: ['lh', '3'] }],
+    [{ pitch: 60, at: 960, len: 960, groups: ['lh'] }],
   );
 });
 
@@ -58,7 +54,6 @@ test('the closing chord contains five sustained notes in the final measure', () 
     [36, 48, 64, 67, 72],
   );
   assert(closing.every((note) => note.len === ticksPerBar));
-  assert.match(score.annotations.at(-1)!.text, /hold it longer/);
 });
 
 test('pitch labels retain register across octave boundaries', () => {

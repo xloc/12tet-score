@@ -11,11 +11,19 @@ const playback = usePlaybackStore();
 const midi = useMidiStore();
 const notation = useTemplateRef<InstanceType<typeof MusicNotation>>('notation');
 
+function updateScore({ file }: { file: string }) {
+  void sheet.refreshHosted(file);
+}
+
 onMounted(() => {
   void sheet.initialize();
   void midi.restoreBluetooth();
+  import.meta.hot?.on('score-updated', updateScore);
 });
-onBeforeUnmount(playback.stop);
+onBeforeUnmount(() => {
+  playback.stop();
+  import.meta.hot?.off('score-updated', updateScore);
+});
 </script>
 
 <template>
@@ -28,6 +36,7 @@ onBeforeUnmount(playback.stop);
       :fold-threshold="sheet.foldThreshold"
       :variable-bar-width="sheet.variableBarWidth"
       :playhead="playback.currentTick"
+      :pressed-pitches="midi.pressedPitches"
       :playing="playback.playing"
       :selection="sheet.selection"
       @select="sheet.selection = $event"
