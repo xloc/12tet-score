@@ -60,7 +60,7 @@ export default defineConfig({
   base: './',
   plugins: [vue(), tailwindcss(), scoreCatalogPlugin()],
   test: {
-    include: ['src/**/*.test.ts'],
+    include: ['tests/**/*.test.ts'],
   },
   lint: {
     options: {
