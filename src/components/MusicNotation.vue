@@ -35,6 +35,7 @@ const props = defineProps<{
   playhead: number;
   pressedPitches?: number[];
   playing: boolean;
+  following?: boolean;
   selection: MusicSelection;
 }>();
 const emit = defineEmits<{ select: [selection: MusicSelection]; seek: [tick: number] }>();
@@ -102,9 +103,9 @@ watch(
   { flush: 'post' },
 );
 watch(
-  [playheadLine, () => props.playing],
+  [playheadLine, playheadBar, () => props.playing, () => props.following],
   () => {
-    if (props.playing) {
+    if (props.playing || props.following) {
       scrollToPlayhead();
     }
   },
@@ -125,7 +126,7 @@ function layoutLabels() {
   void nextTick(() => {
     if (!surface.value) return;
     labelLayouts.value = layoutPitchLabels(surface.value, lines.value);
-    if (props.playing) scrollToPlayhead();
+    if (props.playing || props.following) scrollToPlayhead();
   });
 }
 

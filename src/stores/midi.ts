@@ -77,6 +77,12 @@ export const useMidiStore = defineStore('midi', () => {
   let access: MIDIAccess | undefined;
   let bluetooth: BluetoothSession | undefined;
   let disposed = false;
+  const noteListeners = new Set<(pitch: number) => void>();
+
+  function onNoteOn(listener: (pitch: number) => void) {
+    noteListeners.add(listener);
+    return () => noteListeners.delete(listener);
+  }
 
   function updateInput(port: MIDIPort | null) {
     if (port?.type !== 'input') return;
@@ -102,6 +108,7 @@ export const useMidiStore = defineStore('midi', () => {
     const pressed = inputs.value[id]!.pressed;
     if (command === 0x90 && velocity! > 0) {
       (pressed[channel] ??= new Set()).add(pitch!);
+      for (const listener of noteListeners) listener(pitch!);
     } else if (command === 0x80 || command === 0x90) {
       pressed[channel]?.delete(pitch!);
     } else if (command === 0xb0 && (pitch === 120 || pitch === 123)) {
@@ -306,6 +313,7 @@ export const useMidiStore = defineStore('midi', () => {
 
   onScopeDispose(() => {
     disposed = true;
+    noteListeners.clear();
     disconnect();
     closeBluetooth();
   });
@@ -323,6 +331,7 @@ export const useMidiStore = defineStore('midi', () => {
     inputs,
     connectedCount,
     pressedPitches,
+    onNoteOn,
     connect,
     disconnect,
     connectBluetooth,

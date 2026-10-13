@@ -83,6 +83,23 @@ test('MIDI access is requested explicitly without SysEx, and duplicate requests 
   expect(requestMIDIAccess).toHaveBeenCalledOnce();
 });
 
+test('attack listeners receive each note-on on every channel and can unsubscribe', async () => {
+  requestMIDIAccess.mockResolvedValue(createAccess([usb, ble]));
+  await midi.connect();
+  const attacks: number[] = [];
+  const unsubscribe = midi.onNoteOn((pitch) => attacks.push(pitch));
+  message(usb, [0x90, 60, 100]);
+  message(usb, [0x90, 60, 100]);
+  message(ble, [0x92, 64, 40]);
+  message(usb, [0x80, 60, 0]);
+  message(ble, [0x92, 64, 0]);
+  message(usb, [0xb0, 64, 127]);
+  expect(attacks).toEqual([60, 60, 64]);
+  unsubscribe();
+  message(usb, [0x90, 67, 100]);
+  expect(attacks).toEqual([60, 60, 64]);
+});
+
 test('hotplug updates inputs and retains disconnected devices without duplicating a reconnected port', async () => {
   const access = createAccess();
   requestMIDIAccess.mockResolvedValue(access);

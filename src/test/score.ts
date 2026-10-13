@@ -18,6 +18,39 @@ export function createScoreStore(pinia: Pinia = createPinia()) {
 export const { totalTicks, barCount } = createScoreStore();
 export const ticksPerBar = 1920;
 
+export function practiceScore(...bars: number[][][]): Score {
+  return {
+    ...score,
+    ppq: 1,
+    meters: [{ at: 0, meter: '4/4' }],
+    tempos: [{ at: 0, bpm: 80 }],
+    annotations: [],
+    chords: [],
+    pitchGuides: [],
+    pedals: [],
+    sections: [],
+    notes: bars.flatMap((events, bar) =>
+      events.flatMap((pitches, index) =>
+        pitches.map((pitch) => ({
+          pitch,
+          at: bar * 4 + index,
+          len: index === events.length - 1 ? 4 - index : 1,
+          groups: [],
+        })),
+      ),
+    ),
+  };
+}
+
+export const distantScore = practiceScore(
+  [[60], [62], [64], [65]],
+  [[67], [69], [71], [72]],
+  [[73], [75], [78], [80]],
+  [[82], [84], [86], [88]],
+  [[48], [50], [52], [53]],
+  [[55], [57], [59], [60]],
+);
+
 export function notationProps(options: {
   notes: Note[];
   ppq: number;

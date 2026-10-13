@@ -97,7 +97,8 @@ test('play selection belongs to transport and is disabled for empty selections o
     const panels = html.match(/<section\b[^>]*>[\s\S]*?<\/section>/g)!;
     const button = panels[0]!.match(/<button\b[^>]*title="Play selection"[^>]*>/)![0];
     expect(/\sdisabled(?:\s|=|>)/.test(button)).toBe(disabled);
-    expect(panels).toHaveLength(3);
+    expect(panels).toHaveLength(4);
+    expect(panels[3]).toContain('Following settings');
     expect(panels[1]).not.toContain('Play selection');
     expect(panels[0]).not.toContain('title="Settings"');
     expect(panels[1]).toContain('title="Settings"');
@@ -170,7 +171,7 @@ test('the app renders a loaded score with its own timing and metadata', async ()
   expect(scoreDialog).toContain(score.source.url);
   expect(scoreDialog).toContain(score.source.license);
   expect(scoreDialog).not.toContain('Higher means higher pitch');
-  expect(html.match(/<dialog\b/g)).toHaveLength(2);
+  expect(html.match(/<dialog\b/g)).toHaveLength(3);
   expect(html).not.toContain('<footer');
   expect(html.match(/data-note-index/g)).toHaveLength(1);
   expect(textContent(html)).toContain('90 BPM');
@@ -206,7 +207,7 @@ test('the app keeps the load dialog available while the initial public score is 
     expect(pending).toContain('Loading score…');
     expect(pending).toContain('title="Settings"');
     expect(pending).not.toContain('data-note-index');
-    expect(pending.match(/<dialog\b/g)).toHaveLength(2);
+    expect(pending.match(/<dialog\b/g)).toHaveLength(3);
     expect(pending).toContain('accept=".json,application/json"');
     const scorePanel = pending
       .match(/<section\b[^>]*>[\s\S]*?<\/section>/g)!

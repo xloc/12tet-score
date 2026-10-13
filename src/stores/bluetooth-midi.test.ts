@@ -1,7 +1,11 @@
 import { afterEach, beforeEach, expect, test, vi } from 'vite-plus/test';
-import { createPinia } from 'pinia';
+import { createPinia, type Pinia } from 'pinia';
 import { bluetoothMidiCharacteristic, bluetoothMidiService } from '../bluetooth-midi';
 import { useMidiStore } from './midi';
+import { useFollowingStore } from './following';
+import { usePlaybackStore } from './playback';
+import { useScoreStore } from './score';
+import { score } from '../test/score';
 
 class Characteristic extends EventTarget {
   properties = { read: true };
@@ -34,6 +38,7 @@ const requestMIDIAccess = vi.fn();
 let saved: Map<string, string>;
 let device: Device;
 let midi: ReturnType<typeof useMidiStore>;
+let pinia: Pinia;
 
 beforeEach(() => {
   requestDevice.mockReset();
@@ -50,7 +55,8 @@ beforeEach(() => {
   device = new Device();
   requestDevice.mockResolvedValue(device);
   getDevices.mockResolvedValue([device]);
-  midi = useMidiStore(createPinia());
+  pinia = createPinia();
+  midi = useMidiStore(pinia);
 });
 
 afterEach(() => {
@@ -79,6 +85,44 @@ test('Bluetooth explicitly chooses a MIDI service, reads the handshake, and subs
   expect(midi.pressedPitches).toEqual([67]);
   device.characteristic.packet([0x80, 0x84, 0xb0, 123, 0]);
   expect(midi.pressedPitches).toEqual([]);
+});
+
+test('Bluetooth packets deliver every attack to the follower in order', async () => {
+  const sheet = useScoreStore(pinia);
+  sheet.load({
+    ...score,
+    ppq: 1,
+    meters: [{ at: 0, meter: '4/4' }],
+    tempos: [{ at: 0, bpm: 80 }],
+    sections: [],
+    annotations: [],
+    chords: [],
+    pedals: [],
+    pitchGuides: [],
+    notes: [60, 60, 62, 64, 67, 69, 71, 72].map((pitch, at) => ({
+      pitch,
+      at,
+      len: 1,
+      groups: [],
+    })),
+  });
+  const following = useFollowingStore(pinia);
+  const playback = usePlaybackStore(pinia);
+  try {
+    await midi.connectBluetooth();
+    device.characteristic.packet([0x80, 0x81, 0x90, 60, 100, 60, 100, 62, 100, 64, 100, 67, 100]);
+    expect(following.recentPitches).toEqual([60, 60, 62, 64, 67]);
+    expect(playback.currentTick).toBe(4);
+    expect(following.result?.decision).toBe('advanced');
+    device.characteristic.packet([0x80, 0x82, 0x80, 60, 0, 62, 0]);
+    expect(following.recentPitches).toHaveLength(5);
+    device.dispatchEvent(new Event('gattserverdisconnected'));
+    expect(following.result).toBeNull();
+  } finally {
+    following.$dispose();
+    playback.$dispose();
+    sheet.$dispose();
+  }
 });
 
 test('a pending chooser prevents duplicate requests and connected devices do not open another picker', async () => {

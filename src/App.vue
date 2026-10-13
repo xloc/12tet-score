@@ -5,10 +5,12 @@ import MusicNotation from './components/MusicNotation.vue';
 import { usePlaybackStore } from './stores/playback';
 import { useScoreStore } from './stores/score';
 import { useMidiStore } from './stores/midi';
+import { useFollowingStore } from './stores/following';
 
 const sheet = useScoreStore();
 const playback = usePlaybackStore();
 const midi = useMidiStore();
+const following = useFollowingStore();
 const notation = useTemplateRef<InstanceType<typeof MusicNotation>>('notation');
 
 function updateScore({ file }: { file: string }) {
@@ -38,6 +40,7 @@ onBeforeUnmount(() => {
       :playhead="playback.currentTick"
       :pressed-pitches="midi.pressedPitches"
       :playing="playback.playing"
+      :following="following.active && following.result?.tick !== undefined"
       :selection="sheet.selection"
       @select="sheet.selection = $event"
       @seek="playback.seek"

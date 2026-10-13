@@ -8,6 +8,7 @@ import ContextInspector from './ContextInspector.vue';
 import ControlButton from './ControlButton.vue';
 import InfoPanel from './InfoPanel.vue';
 import ScorePanel from './ScorePanel.vue';
+import FollowingPanel from './FollowingPanel.vue';
 
 const emit = defineEmits<{ scrollToPlayhead: [] }>();
 const sheet = useScoreStore();
@@ -36,7 +37,9 @@ async function goToStart() {
 </script>
 
 <template>
-  <aside class="pointer-events-none absolute inset-x-3 bottom-3 z-30 flex gap-3 overflow-x-auto">
+  <aside
+    class="pointer-events-none absolute inset-x-3 bottom-3 z-30 flex items-end gap-3 overflow-x-auto"
+  >
     <InfoPanel v-if="score" class="w-48">
       <div class="flex items-center gap-2">
         <ControlButton primary icon-only :title="playLabel" @click="togglePlayback">
@@ -79,5 +82,6 @@ async function goToStart() {
 
     <ContextInspector />
     <ScorePanel />
+    <FollowingPanel @scroll-to-playhead="emit('scrollToPlayhead')" />
   </aside>
 </template>
