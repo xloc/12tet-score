@@ -87,7 +87,13 @@ export class ScoreFollower {
   private bar = 0;
 
   constructor(score: Score, tick = 0) {
-    this.bars = scoreBars(scoreDuration(score), score.ppq, score.meters, score.sections);
+    this.bars = scoreBars(
+      scoreDuration(score),
+      score.ppq,
+      score.meters,
+      score.sections,
+      score.pickup,
+    );
     const onsets = new Map<number, Set<number>>();
     for (const note of score.notes) {
       if (!onsets.has(note.at)) onsets.set(note.at, new Set());
@@ -118,7 +124,7 @@ export class ScoreFollower {
   }
 
   choose(candidate: MatchCandidate) {
-    this.bar = candidate.bar - 1;
+    this.bar = this.bars.findIndex((bar) => bar.number === candidate.bar);
     this.paths = [
       {
         index: this.events.findIndex((event) => event.at === candidate.at),

@@ -32,6 +32,27 @@ const chord: Note[] = [60, 64, 67, 72, 76].map((pitch) => ({
   groups: ['lh', '2'],
 }));
 
+test('unlabeled grace notes need only bar width while retaining exact time and pitch positions', () => {
+  const grace: Note = { pitch: 71, at: 1800, len: 120, groups: ['rh'], grace: true };
+  const notes = [{ pitch: 60, at: 0, len: 1800, groups: ['rh'] }, grace];
+  const line = scoreLines(notes, 1920, layout)[0]!;
+  assert.equal(line.minimum, 96);
+  assert.equal(line.maximum, 128);
+  assert(line.rows.includes(grace.pitch));
+  assert.equal(line.notes[1]!.note, grace);
+  const placement = notePlacement(grace, line, line.bars[0]!);
+  assert.equal(placement.left, '93.75%');
+  assert.equal(placement.width, '6.25%');
+  assert.equal((parseFloat(placement.width!) / 100) * line.maximum!, 8);
+  const regular = scoreLines(
+    notes.map((note) => ({ ...note, grace: undefined })),
+    1920,
+    layout,
+  )[0]!;
+  assert.equal(regular.minimum, 384);
+  assert.equal(regular.maximum, 512);
+});
+
 test('a held chord and a silent bar are narrower than dense rhythm regardless of chord size', () => {
   const widths = [
     [],

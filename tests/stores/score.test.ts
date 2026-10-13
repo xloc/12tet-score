@@ -130,7 +130,9 @@ test('hosted scores are saved by filename and fetched fresh after refresh', asyn
   const updated = { ...next, title: 'Updated piece' };
   fetchScore
     .mockReset()
-    .mockResolvedValueOnce(new Response(JSON.stringify([{ file: 'opening.json' }])))
+    .mockResolvedValueOnce(
+      new Response(JSON.stringify([{ file: 'opening.json' }, { file: 'piece.json' }])),
+    )
     .mockResolvedValueOnce(new Response(JSON.stringify(updated)));
   sheet = useScoreStore(createPinia());
   expect(await sheet.initialize()).toBe(true);
@@ -304,6 +306,32 @@ test('an empty public catalog leaves local file loading available', async () => 
   expect(sheet.error).toBe('');
   expect(await sheet.loadFile(new File([JSON.stringify(next)], 'local.json'))).toBe(true);
   expect(sheet.score).toEqual(next);
+});
+
+test('a removed hosted score falls back to an available catalog entry after refresh', async () => {
+  saved.set(
+    'music-sheet-state',
+    JSON.stringify({
+      version: 1,
+      opened: { file: 'removed.json' },
+      foldThreshold: 6,
+    }),
+  );
+  const catalog = [
+    { file: 'opening.json', title: initialScore.title, composer: initialScore.composer },
+  ];
+  const fetchScore = vi
+    .fn()
+    .mockResolvedValueOnce(new Response(JSON.stringify(catalog)))
+    .mockResolvedValueOnce(new Response(JSON.stringify(initialScore)));
+  vi.stubGlobal('fetch', fetchScore);
+  const sheet = useScoreStore(createPinia());
+  expect(await sheet.initialize()).toBe(true);
+  expect(sheet.score).toEqual(initialScore);
+  expect(sheet.foldThreshold).toBe(6);
+  expect(fetchScore).toHaveBeenLastCalledWith(`${import.meta.env.BASE_URL}scores/opening.json`, {
+    cache: 'no-cache',
+  });
 });
 
 test('fetching the catalog preserves an already loaded score and its selection', async () => {

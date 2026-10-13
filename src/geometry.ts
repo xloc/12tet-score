@@ -1,4 +1,4 @@
-import { pitchLabelSearchBudget, placePitchLabels } from './labels';
+import { placePitchLabels } from './labels';
 import type { ScoreLine } from './layout';
 import type { Rect, TimeLine } from './selection';
 
@@ -68,25 +68,31 @@ export type PitchLabelLayout = {
 export function layoutPitchLabels(surface: HTMLElement, lines: ScoreLine[]) {
   const bounds = surface.getBoundingClientRect();
   const notes = measureNotes(surface, lines).map((note) => {
-    const label = note.element.querySelector<HTMLElement>('[data-pitch-label]')!;
-    return { ...note, width: label.offsetWidth, height: label.offsetHeight };
-  });
-  const obstacles: Rect[] = Array.from(
-    surface.querySelectorAll<HTMLElement>(
-      '[data-pitch-fold], [data-time-label], [data-label-obstacle]',
-    ),
-  ).map((element) => {
-    const rect = element.getBoundingClientRect();
+    const label = note.element.querySelector<HTMLElement>('[data-pitch-label]');
     return {
-      left: rect.left - bounds.left,
-      top: rect.top - bounds.top,
-      right: rect.right - bounds.left,
-      bottom: rect.bottom - bounds.top,
+      ...note,
+      label: label ? { width: label.offsetWidth, height: label.offsetHeight } : null,
     };
   });
+  const obstacles: Rect[] = notes.filter((note) => !note.label).map((note) => note.bar);
+  obstacles.push(
+    ...Array.from(
+      surface.querySelectorAll<HTMLElement>(
+        '[data-pitch-fold], [data-time-label], [data-label-obstacle]',
+      ),
+    ).map((element) => {
+      const rect = element.getBoundingClientRect();
+      return {
+        left: rect.left - bounds.left,
+        top: rect.top - bounds.top,
+        right: rect.right - bounds.left,
+        bottom: rect.bottom - bounds.top,
+      };
+    }),
+  );
   const labels: Record<number, Record<number, PitchLabelLayout>> = {};
   const overflows: Record<number, number> = {};
-  const searchBudget = { remaining: pitchLabelSearchBudget };
+  let previousBottom = 0;
   for (const [lineIndex, element] of surface
     .querySelectorAll<HTMLElement>('[data-score-line]')
     .entries()) {
@@ -94,6 +100,7 @@ export function layoutPitchLabels(surface: HTMLElement, lines: ScoreLine[]) {
     const roll = element.querySelector<HTMLElement>('[data-piano-roll]')!.getBoundingClientRect();
     const left = roll.left - bounds.left;
     const top = roll.top - bounds.top;
+    const minTop = previousBottom - top;
     const bottom =
       Math.max(
         ...Array.from(element.querySelectorAll<HTMLElement>('[data-score-bar]')).map(
@@ -102,29 +109,35 @@ export function layoutPitchLabels(surface: HTMLElement, lines: ScoreLine[]) {
       ) - bounds.top;
     const localNotes = notes
       .filter((note) => note.lineFrom === line.from)
-      .map((note) => ({
-        ...note,
-        bar: {
-          left: note.bar.left - left,
-          right: note.bar.right - left,
-          top: note.bar.top - top,
-          bottom: note.bar.bottom - top,
-        },
-      }));
+      .flatMap(({ label, ...note }) =>
+        label
+          ? [
+              {
+                ...note,
+                ...label,
+                bar: {
+                  left: note.bar.left - left,
+                  right: note.bar.right - left,
+                  top: note.bar.top - top,
+                  bottom: note.bar.bottom - top,
+                },
+              },
+            ]
+          : [],
+      );
     const positions = placePitchLabels(
       localNotes,
       roll.width,
       bottom - top,
       obstacles
-        .filter((obstacle) => obstacle.top >= top && obstacle.bottom <= bottom)
+        .filter((obstacle) => obstacle.bottom >= previousBottom && obstacle.top < bottom)
         .map((obstacle) => ({
           left: obstacle.left - left,
           right: obstacle.right - left,
           top: obstacle.top - top,
           bottom: obstacle.bottom - top,
         })),
-      true,
-      searchBudget,
+      minTop,
     );
     labels[line.from] = {};
     overflows[line.from] = Math.max(
@@ -145,6 +158,7 @@ export function layoutPitchLabels(surface: HTMLElement, lines: ScoreLine[]) {
         },
       };
     }
+    previousBottom = element.getBoundingClientRect().bottom - bounds.top;
   }
   return { labels, overflows };
 }

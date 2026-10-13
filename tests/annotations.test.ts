@@ -15,14 +15,16 @@ test('annotation spans follow measured nonuniform bar widths', () => {
     bars,
     () => 300,
   );
-  expect(placement!.left).toBeCloseTo(307.2);
+  expect(placement!.left).toBeCloseTo(212);
+  expect(placement!.left + placement!.spanLeft).toBeCloseTo(307.2);
   expect(placement!.spanWidth).toBeCloseTo(153.6);
-  expect(placement!.width).toBeCloseTo(153.6);
+  expect(placement!.captionWidth).toBe(300);
+  expect(placement!.width).toBe(300);
   expect(placement!.continuesBefore).toBe(false);
   expect(placement!.continuesAfter).toBe(false);
 });
 
-test('overlapping labels stack while adjacent intervals share a row without expanding for text', () => {
+test('caption overflow reserves space and stacks neighboring annotations', () => {
   const placed = annotationPlacements(
     [
       { at: 0, len: 120, text: 'Very short phrase with a longer explanation', kind: 'text' },
@@ -35,9 +37,25 @@ test('overlapping labels stack while adjacent intervals share a row without expa
     bars,
     () => 192,
   );
-  expect(placed.map((placement) => placement.row)).toEqual([1, 1, 2, 1]);
-  expect(placed[0]!.width).toBeCloseTo(25.6);
+  expect(placed.map((placement) => placement.row)).toEqual([1, 2, 3, 1]);
+  expect(placed[0]!.width).toBe(192);
   expect(placed[0]!.spanWidth).toBeCloseTo(25.6);
+  expect(placed[0]!.wrap).toBe(false);
+});
+
+test('adjacent intervals share a row when their captions fit', () => {
+  const placed = annotationPlacements(
+    [
+      { at: 0, len: 120, text: 'A', kind: 'text' },
+      { at: 120, len: 120, text: 'B', kind: 'text' },
+    ],
+    0,
+    3840,
+    bars,
+    () => 16,
+  );
+  expect(placed.map((placement) => placement.row)).toEqual([1, 1]);
+  expect(placed[0]!.width).toBeCloseTo(25.6);
 });
 
 test('continued intervals clip at line boundaries and point annotations appear only once', () => {
@@ -59,6 +77,7 @@ test('continued intervals clip at line boundaries and point annotations appear o
   for (const placement of placed) {
     expect(placement.left).toBeGreaterThanOrEqual(0);
     expect(placement.left + placement.width).toBeLessThanOrEqual(102.40001);
+    expect(placement.wrap).toBe(true);
   }
 });
 
@@ -74,17 +93,36 @@ test('point captions use their text width instead of a fixed narrow column', () 
   expect(placement!.left).toBe(0);
 });
 
-test('captions near the line end wrap without moving their time anchor', () => {
+test('captions near the line end shift only enough to fit while the interval stays anchored', () => {
   const [placement] = annotationPlacements(
-    [{ at: 2880, len: 960, text: 'A long caption', kind: 'text' }],
+    [{ at: 2880, len: 120, text: 'A long caption', kind: 'text' }],
     0,
     3840,
     bars,
     () => 300,
   );
-  expect(placement!.left).toBeCloseTo(460.8);
-  expect(placement!.width).toBeCloseTo(51.2);
-  expect(placement!.spanWidth).toBeCloseTo(51.2);
+  expect(placement!.left + placement!.spanLeft).toBeCloseTo(460.8);
+  expect(placement!.spanWidth).toBeCloseTo(6.4);
+  expect(placement!.left + placement!.captionLeft).toBe(212);
+  expect(placement!.captionWidth).toBe(300);
+  expect(placement!.left + placement!.width).toBe(512);
+  expect(placement!.wrap).toBe(false);
+});
+
+test('a caption shifted left moves to another row when it overlaps an earlier annotation', () => {
+  const placed = annotationPlacements(
+    [
+      { at: 1680, len: 120, text: 'Earlier', kind: 'text' },
+      { at: 3600, len: 240, text: 'Last', kind: 'text' },
+    ],
+    0,
+    3840,
+    bars,
+    (item) => (item.text === 'Earlier' ? 64 : 120),
+  );
+  expect(placed.map((placement) => placement.row)).toEqual([1, 2]);
+  expect(placed[1]!.left).toBe(392);
+  expect(placed[1]!.left + placed[1]!.spanLeft).toBeCloseTo(499.2);
 });
 
 test('tempo labels share a chord row only when they fit between its caption and interval end', () => {

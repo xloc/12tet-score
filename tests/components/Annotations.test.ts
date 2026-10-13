@@ -119,10 +119,10 @@ test('text and chord pills round true boundaries and keep continuation edges squ
       expect(segment.includes('data-annotation-continues')).toBe(index < 2);
       expect(segment.includes('rounded-l-xl')).toBe(index === 0);
       expect(segment.includes('rounded-r-xl')).toBe(index === 2);
-      expect(segment).toContain('bg-slate-100');
+      expect(segment).toContain('--annotation-shade:var(--color-slate-100)');
       expect(segment).toContain(kind === 'text' ? 'Play smoothly' : 'Cmaj7');
       expect(segment).not.toContain('data-annotation-start-marker');
-      expect(segment).not.toContain('h-px');
+      expect(segment).toContain('data-annotation-underline');
       expect(segment.replace(/<[^>]*>/g, '')).not.toMatch(/[•←→]/);
     }
     if (kind === 'text') {
@@ -134,11 +134,88 @@ test('text and chord pills round true boundaries and keep continuation edges squ
       expect(point).not.toContain('rounded-l-xl');
       expect(point).not.toContain('rounded-r-xl');
       expect(point).not.toContain('bg-slate-100');
+      expect(point).not.toContain('data-annotation-underline');
     }
   }
   expect(html).not.toContain('data-annotation-span');
   expect(html).not.toContain('data-annotation-point');
   expect(html).not.toContain('Continued');
+});
+
+test('a short slur keeps its shaded interval anchored while its caption shifts left with a matching underline', async () => {
+  const line = scoreLines([{ pitch: 60, at: 0, len: 720, groups: [] }], 720, {
+    ppq: 480,
+    meters: [{ at: 0, meter: '3/8' }],
+    width: 192,
+    rem: 16,
+    foldThreshold: 12,
+    variableBarWidth: false,
+  })[0]!;
+  const item: DisplayAnnotation = { at: 600, len: 120, text: 'Left hand: Slur', kind: 'text' };
+  const geometry = {
+    from: 0,
+    to: 720,
+    left: 40,
+    right: 232,
+    top: 0,
+    bottom: 50,
+    bars: [{ from: 0, to: 720, left: 40, right: 232 }],
+  };
+  for (const hovered of [null, item]) {
+    const html = await renderToString(
+      createSSRApp(AnnotationLane, {
+        items: [item],
+        line,
+        geometry,
+        rem: 16,
+        hovered,
+      }),
+    );
+    const group = html.match(/<div\b[^>]*data-annotation-kind="text"[^>]*>/)![0];
+    const background = html.match(/<span\b[^>]*data-annotation-background[^>]*>/)![0];
+    const underline = html.match(/<span\b[^>]*data-annotation-underline[^>]*>/)![0];
+    const caption = html.match(/<p\b[^>]*data-annotation-caption[^>]*>/)![0];
+    const left = Number(group.match(/left:([^p]+)px/)![1]);
+    const width = Number(group.match(/width:([^p]+)px/)![1]);
+    expect(left).toBeCloseTo(77);
+    expect(width).toBeCloseTo(115);
+    expect(left + width).toBeCloseTo(192);
+    expect(left + Number(background.match(/left:([^p]+)px/)![1]) - 2).toBeCloseTo(160);
+    expect(Number(background.match(/width:([^p]+)px/)![1])).toBeCloseTo(28);
+    expect(underline).toContain('bottom-0 h-[2px]');
+    expect(Number(underline.match(/left:([^p]+)px/)![1])).toBeCloseTo(8);
+    expect(Number(underline.match(/width:([^p]+)px/)![1])).toBeCloseTo(99);
+    expect(background).toContain('inset-y-0');
+    for (const decoration of [background, underline])
+      expect(decoration).toContain('background-color:var(--annotation-shade)');
+    expect(group).toContain(`--annotation-shade:var(--color-slate-${hovered ? 200 : 100})`);
+    expect(group.includes('text-slate-900')).toBe(hovered === item);
+    expect(caption).toContain('whitespace-nowrap');
+    expect(html).toContain('Left hand: Slur');
+  }
+});
+
+test('a caption wider than the score line wraps at the full line width', async () => {
+  const line = scoreLines([{ pitch: 60, at: 0, len: 1920, groups: [] }], 1920, {
+    ppq: 480,
+    meters: [{ at: 0, meter: '4/4' }],
+    width: 512,
+    rem: 16,
+    foldThreshold: 12,
+    variableBarWidth: false,
+  })[0]!;
+  const html = await renderToString(
+    createSSRApp(AnnotationLane, {
+      items: [
+        { at: 1800, len: 120, text: 'A long performance instruction. '.repeat(10), kind: 'text' },
+      ],
+      line,
+      rem: 16,
+    }),
+  );
+  const caption = html.match(/<p\b[^>]*data-annotation-caption[^>]*>/)![0];
+  expect(caption).toContain('width:512px');
+  expect(caption).not.toContain('whitespace-nowrap');
 });
 
 test('a shared hover highlights every wrapped segment in neutral colors and clears on release', async () => {
@@ -171,7 +248,7 @@ test('a shared hover highlights every wrapped segment in neutral colors and clea
       hovered.value = active;
       const html = await renderLanes();
       expect(html.match(/data-annotation-highlighted/g)).toHaveLength(3);
-      expect(html.match(/bg-slate-200/g)).toHaveLength(3);
+      expect(html.match(/--annotation-shade:var\(--color-slate-200\)/g)).toHaveLength(3);
       expect(html).not.toMatch(/teal|green|emerald/);
     }
     hovered.value = null;

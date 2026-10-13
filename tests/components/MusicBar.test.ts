@@ -3,6 +3,46 @@ import { createSSRApp, h } from 'vue';
 import { renderToString } from 'vue/server-renderer';
 import { scoreLines } from '../../src/layout';
 import MusicBar from '../../src/components/MusicBar.vue';
+import type { Note } from '../../src/music';
+
+test('grace notes render selectable note bars without labels or connectors', async () => {
+  const notes: Note[] = [
+    { pitch: 71, at: 0, len: 60, groups: ['rh'], grace: true, finger: 2, text: 'Grace detail' },
+    { pitch: 69, at: 60, len: 420, groups: ['rh'] },
+  ];
+  const [line] = scoreLines(notes, 480, {
+    ppq: 480,
+    meters: [{ at: 0, meter: '4/4' }],
+    width: 512,
+    rem: 16,
+    foldThreshold: 0,
+    variableBarWidth: false,
+  });
+  const html = await renderToString(
+    createSSRApp(MusicBar, {
+      line: line!,
+      bar: line!.bars[0]!,
+      ppq: 480,
+      selected: new Set([0]),
+      range: null,
+      playhead: undefined,
+      labels: { 0: { label: { left: 0, top: -18 }, connector: { left: 4, top: -2, height: 2 } } },
+      groups: [],
+      pitchGuides: [],
+    }),
+  );
+  const grace = html.match(/<button\b[^>]*data-note-index="0"[^>]*>[\s\S]*?<\/button>/)![0];
+  expect(grace).toContain('left:0%;width:12.5%');
+  expect(grace).toContain('tabindex="0"');
+  expect(grace).toContain('outline-teal-700');
+  expect(grace).toContain('title="B4 · Grace note · 0.125 quarter notes');
+  expect(grace.replace(/^<button\b[^>]*>/, '')).not.toMatch(
+    /data-pitch-label|bg-current|B4|finger|Grace detail/,
+  );
+  expect(html.match(/data-pitch-label/g)).toHaveLength(1);
+  expect(html).toContain('A4');
+  expect(html).toContain('title="A4 · 0.875 quarter notes');
+});
 
 async function heldNote() {
   const note = { pitch: 60, at: 1440, len: 2880, groups: ['lh', '3'] };

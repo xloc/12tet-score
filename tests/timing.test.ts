@@ -56,6 +56,32 @@ test('invalid meter changes and section starts cannot split a bar', () => {
     expect(() => scoreBars(3840, 480, [{ at: 0, meter }])).toThrow('Invalid meter');
 });
 
+test('a pickup precedes the first full bar without changing the meter', () => {
+  const meters = [{ at: 0, meter: '3/8' }];
+  const bars = scoreBars(1920, 480, meters, [], 240);
+  expect(bars.map(({ from, to, number }) => ({ from, to, number }))).toEqual([
+    { from: 0, to: 240, number: 0 },
+    { from: 240, to: 960, number: 1 },
+    { from: 960, to: 1680, number: 2 },
+    { from: 1680, to: 1920, number: 3 },
+  ]);
+  expect(bars.every((bar) => bar.meter === '3/8' && bar.beatTicks === 240)).toBe(true);
+  const lines = scoreLines([], 1920, {
+    ppq: 480,
+    meters,
+    pickup: 240,
+    width: 512,
+    rem: 16,
+    foldThreshold: 12,
+    variableBarWidth: false,
+  });
+  expect(lines.flatMap((line) => line.bars).map((bar) => [bar.from, bar.to])).toEqual(
+    bars.map((bar) => [bar.from, bar.to]),
+  );
+  for (const pickup of [-1, 720, NaN])
+    expect(() => scoreBars(1920, 480, meters, [], pickup)).toThrow('Pickup');
+});
+
 test('tempo changes integrate elapsed seconds and invert exactly, including practice speed', () => {
   expect(secondsAt(960, tempos, 480)).toBe(2);
   expect(secondsAt(1920, tempos, 480)).toBe(3);
@@ -78,4 +104,13 @@ test('annotation and pedal intervals retain trailing silent score time', () => {
       }),
     ),
   ).toBe(1920);
+});
+
+test('explicit duration retains the final rest without truncating sounding notes', () => {
+  const score = createScore({
+    duration: 1920,
+    notes: [{ at: 0, len: 1440, pitch: 60, groups: [] }],
+  });
+  expect(scoreDuration(score)).toBe(1920);
+  expect(scoreDuration({ ...score, duration: 480 })).toBe(1440);
 });

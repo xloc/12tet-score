@@ -13,6 +13,7 @@ export function scoreBars(
   ppq: number,
   meters: Meter[],
   sections: Section[] = [],
+  pickup = 0,
 ) {
   if (meters[0]?.at !== 0) throw new Error('The first meter must start at tick 0.');
   for (const [index, meter] of meters.entries()) {
@@ -32,14 +33,17 @@ export function scoreBars(
     const meter = meters[meterIndex]!;
     const [numerator, denominator] = meter.meter.split('/').map(Number);
     const beatTicks = (ppq * 4) / denominator!;
-    const next = from + numerator! * beatTicks;
+    const length = numerator! * beatTicks;
+    if (from === 0 && (!Number.isFinite(pickup) || pickup < 0 || pickup >= length))
+      throw new Error('Pickup must be shorter than the first bar.');
+    const next = from + (from === 0 && pickup ? pickup : length);
     if (meters[meterIndex + 1] && meters[meterIndex + 1]!.at < next) {
       throw new Error('Meter changes must start at a bar boundary.');
     }
     bars.push({
       from,
       to: Math.min(next, totalTicks),
-      number: bars.length + 1,
+      number: bars.length + (pickup ? 0 : 1),
       meter: meter.meter,
       beatTicks,
     });

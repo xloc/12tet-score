@@ -2,22 +2,23 @@ import { expect, test } from 'vite-plus/test';
 import { layoutPitchLabels, measureNotes, measureTimeLines } from '../src/geometry';
 import { barPosition, scoreLines, timePlacement } from '../src/layout';
 import { placePitchLabels } from '../src/labels';
-import { boxHits, tickAtPoint } from '../src/selection';
+import { boxHits, tickAtPoint, type Rect } from '../src/selection';
 import type { Note } from '../src/music';
 
-function fixture() {
+function fixture(obstacles: Rect[] = [], graceIndices: number[] = []) {
   const held: Note = { pitch: 60, at: 1440, len: 2880, groups: ['lh', '3'] };
-  const notes = [
+  const notes: Note[] = [
     { pitch: 60, at: 2400, len: 960, groups: ['lh', '2'] },
     held,
     ...Array.from({ length: 16 }, (_, index) => ({
-      pitch: 76,
+      pitch: index === 0 && graceIndices.includes(2) ? 78 : 76,
       at: index * 120,
       len: 120,
       groups: ['rh', '1'],
     })),
     { pitch: 72, at: 3840, len: 120, groups: ['rh', '1'] },
   ];
+  for (const index of graceIndices) notes[index]!.grace = true;
   const lines = scoreLines(notes, 5760, {
     ppq: 480,
     meters: [{ at: 0, meter: '4/4' }],
@@ -52,7 +53,7 @@ function fixture() {
             top: noteTop,
             bottom: noteTop + 4,
           }),
-          querySelector: () => ({ offsetWidth: 32, offsetHeight: 16 }),
+          querySelector: () => (note.grace ? null : { offsetWidth: 32, offsetHeight: 16 }),
         } as unknown as HTMLElement);
       }
       return {
@@ -82,13 +83,61 @@ function fixture() {
       querySelectorAll: (selector: string) => (selector === '[data-score-bar]' ? bars : fragments),
     } as unknown as HTMLElement;
   });
+  const obstacleElements = obstacles.map(
+    (rect) =>
+      ({
+        getBoundingClientRect: () => ({
+          left: rect.left + origin.left,
+          right: rect.right + origin.left,
+          top: rect.top + origin.top,
+          bottom: rect.bottom + origin.top,
+        }),
+      }) as unknown as HTMLElement,
+  );
   const surface = {
     scrollWidth: 512,
     getBoundingClientRect: () => ({ ...origin, width: 512, height: top - 48 + 16 }),
-    querySelectorAll: (selector: string) => (selector === '[data-score-line]' ? rowElements : []),
+    querySelectorAll: (selector: string) =>
+      selector === '[data-score-line]' ? rowElements : obstacleElements,
   } as unknown as HTMLElement;
   return { held, notes, lines, surface };
 }
+
+test('unlabeled grace bars remain measurable and block nearby ordinary labels', () => {
+  const { lines, surface } = fixture([], [2]);
+  const measured = measureNotes(surface, lines);
+  const layout = layoutPitchLabels(surface, lines);
+  const grace = measured.find((note) => note.index === 2)!;
+  expect(layout.labels[grace.lineFrom]![grace.index]).toBeUndefined();
+  for (const note of measured) {
+    const position = layout.labels[note.lineFrom]![note.index];
+    if (!position) continue;
+    const label = {
+      left: note.bar.left + position.label.left,
+      top: note.bar.top + position.label.top,
+      right: note.bar.left + position.label.left + 32,
+      bottom: note.bar.top + position.label.top + 16,
+    };
+    expect(boxHits({ ...label, mode: 'intersect' }, grace.bar)).toBe(false);
+  }
+  const next = measured.find((note) => note.index === 3)!;
+  expect(next.bar.top + layout.labels[next.lineFrom]![3]!.label.top).toBeGreaterThanOrEqual(
+    next.bar.bottom + 2,
+  );
+});
+
+test('a roll containing only grace notes needs no label positions or overflow', () => {
+  const { lines, surface } = fixture(
+    [],
+    Array.from({ length: 19 }, (_, index) => index),
+  );
+  const layout = layoutPitchLabels(surface, lines);
+  expect(measureNotes(surface, lines)).toHaveLength(
+    lines.reduce((count, line) => count + line.notes.length, 0),
+  );
+  expect(Object.values(layout.labels)).toEqual(lines.map(() => ({})));
+  expect(Object.values(layout.overflows)).toEqual(lines.map(() => 0));
+});
 
 test('interaction reads final fractional bar bounds without feeding them back into rendering', () => {
   const { lines, surface } = fixture();
@@ -139,7 +188,7 @@ test('label placement retains original note order and full spans after fragment 
   );
   const actual = layoutPitchLabels(surface, lines);
   const geometry = measureTimeLines(surface, lines);
-  for (const line of geometry) {
+  for (const [lineIndex, line] of geometry.entries()) {
     const notes = measured
       .filter((note) => note.lineFrom === line.from)
       .map((note) => ({
@@ -148,15 +197,43 @@ test('label placement retains original note order and full spans after fragment 
         height: 16,
         bar: { ...note.bar, top: note.bar.top - line.top, bottom: note.bar.bottom - line.top },
       }));
-    const expected = placePitchLabels(notes, 512, line.bottom - line.top, [], true);
+    const minTop = (geometry[lineIndex - 1]?.bottom ?? 0) - line.top;
+    const expected = placePitchLabels(notes, 512, line.bottom - line.top, [], minTop);
     for (const [index, note] of notes.entries()) {
       const position = actual.labels[note.lineFrom]![note.index]!;
       expect(position.label.left + note.bar.left).toBe(expected[index]!.left);
       expect(position.label.top + note.bar.top).toBe(expected[index]!.top);
-      expect(expected[index]!.top).toBeGreaterThanOrEqual(0);
+      expect(expected[index]!.top).toBeGreaterThanOrEqual(minTop);
       expect(expected[index]!.bottom).toBeLessThanOrEqual(
         line.bottom - line.top + actual.overflows[line.from]!,
       );
     }
+  }
+});
+
+test('labels use the existing space above a roll while avoiding actual bar numbers', () => {
+  const { lines, surface } = fixture([{ left: 0, top: 0, right: 16, bottom: 16 }]);
+  const measured = measureNotes(surface, lines);
+  const layout = layoutPitchLabels(surface, lines);
+  const rollTop = measureTimeLines(surface, lines)[0]!.top;
+  const numberedNote = measured.find(
+    (note) => note.lineFrom === lines[0]!.from && note.index === 2,
+  )!;
+  const clearNote = measured.find((note) => note.lineFrom === lines[0]!.from && note.index === 3)!;
+  const numberedTop = numberedNote.bar.top + layout.labels[numberedNote.lineFrom]![2]!.label.top;
+  const clearTop = clearNote.bar.top + layout.labels[clearNote.lineFrom]![3]!.label.top;
+  expect(numberedTop).toBeGreaterThanOrEqual(rollTop);
+  expect(clearTop).toBeGreaterThanOrEqual(0);
+  expect(clearTop + 16).toBeLessThanOrEqual(rollTop);
+});
+
+test('a title above a roll remains an obstacle for its pitch labels', () => {
+  const { lines, surface } = fixture([{ left: 0, top: 0, right: 512, bottom: 16 }]);
+  const layout = layoutPitchLabels(surface, lines);
+  for (const note of measureNotes(surface, lines).filter(
+    (note) => note.lineFrom === lines[0]!.from,
+  )) {
+    const top = note.bar.top + layout.labels[note.lineFrom]![note.index]!.label.top;
+    expect(top).toBeGreaterThanOrEqual(18);
   }
 });

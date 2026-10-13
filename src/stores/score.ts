@@ -27,10 +27,16 @@ export const useScoreStore = defineStore('score', () => {
   const totalTicks = computed(() => (score.value ? scoreDuration(score.value) : 0));
   const bars = computed(() =>
     score.value
-      ? scoreBars(totalTicks.value, score.value.ppq, score.value.meters, score.value.sections)
+      ? scoreBars(
+          totalTicks.value,
+          score.value.ppq,
+          score.value.meters,
+          score.value.sections,
+          score.value.pickup,
+        )
       : [],
   );
-  const barCount = computed(() => bars.value.length);
+  const barCount = computed(() => bars.value.filter((bar) => bar.number > 0).length);
   const foldThreshold = ref(saved.foldThreshold ?? 12);
   const variableBarWidth = ref(saved.variableBarWidth ?? false);
   const selection = ref<MusicSelection>({ kind: 'notes', indices: [] });
@@ -69,7 +75,7 @@ export const useScoreStore = defineStore('score', () => {
   function load(next: Score, file?: string) {
     if (!Number.isFinite(next.ppq) || next.ppq <= 0) throw new Error('PPQ must be positive.');
     validateTempos(next.tempos);
-    scoreBars(scoreDuration(next), next.ppq, next.meters, next.sections);
+    scoreBars(scoreDuration(next), next.ppq, next.meters, next.sections, next.pickup);
     selection.value = { kind: 'notes', indices: [] };
     score.value = next;
     opened.value = file ? { file } : { score: next };
@@ -143,10 +149,11 @@ export const useScoreStore = defineStore('score', () => {
       if (!current()) return;
       catalog.value = entries;
       if (!score.value) {
-        const file =
+        const savedFile =
           saved.version === savedScoreVersion && saved.opened && 'file' in saved.opened
             ? saved.opened.file
-            : catalog.value[0]?.file;
+            : undefined;
+        const file = entries.find((entry) => entry.file === savedFile)?.file ?? entries[0]?.file;
         if (file) {
           const next = await readJSON<Score>(file);
           if (current()) load(next, file);

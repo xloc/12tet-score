@@ -150,13 +150,13 @@ function hasLabel(note: Note) {
       :data-note-index="index"
       :tabindex="hasLabel(note) ? 0 : -1"
       :style="{ ...notePlacement(note, line, bar), ...groupAppearance(note.groups, groups) }"
-      :title="`${pitchLabel(note.pitch)} · ${note.len / ppq} quarter notes${note.finger ? ` · finger ${note.finger}` : ''}${note.text ? ` · ${note.text}` : ''} · ${groups
+      :title="`${pitchLabel(note.pitch)}${note.grace ? ' · Grace note' : ''} · ${note.len / ppq} quarter notes${note.finger ? ` · finger ${note.finger}` : ''}${note.text ? ` · ${note.text}` : ''} · ${groups
         .filter((group) => note.groups.includes(group.id))
         .map((group) => group.name)
         .join(', ')}`"
       @click="emit('select', index, $event)"
     >
-      <template v-if="hasLabel(note)">
+      <template v-if="!note.grace && hasLabel(note)">
         <span
           v-if="labels[index]"
           class="pointer-events-none absolute w-px bg-current opacity-40"

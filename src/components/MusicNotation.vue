@@ -51,6 +51,7 @@ const lines = computed(() =>
     ppq: props.score.ppq,
     meters: props.score.meters,
     sections: props.score.sections,
+    pickup: props.score.pickup,
     width: availableWidth.value,
     rem: rem.value,
     foldThreshold: props.foldThreshold,
@@ -243,7 +244,7 @@ function clearSelection() {
             {{ section.text }}
           </p>
         </div>
-        <div data-label-obstacle data-bar-numbering class="h-4"></div>
+        <div data-bar-numbering class="h-4"></div>
         <div
           data-piano-roll
           class="relative flex w-full items-start"

@@ -79,34 +79,60 @@ const placements = computed(() => {
       :data-annotation-continues="placement.continuesAfter ? '' : undefined"
       :data-annotation-highlighted="hovered === placement.item ? '' : undefined"
       class="relative min-w-0 self-center"
-      :class="[
-        placement.item.kind === 'chord' ? 'text-slate-900' : '',
-        placement.item.kind === 'timing'
-          ? [
-              'rounded-xl px-2',
-              hovered === placement.item ? 'bg-slate-300 text-slate-900' : 'bg-slate-200',
-            ]
-          : placement.item.len
-            ? [
-                'mx-[2px] px-2',
-                placement.continuesBefore ? '' : 'rounded-l-xl',
-                placement.continuesAfter ? '' : 'rounded-r-xl',
-                hovered === placement.item ? 'bg-slate-200 text-slate-900' : 'bg-slate-100',
-              ]
-            : { 'bg-slate-100 text-slate-900': hovered === placement.item },
-      ]"
+      :class="{ 'text-slate-900': placement.item.kind === 'chord' || hovered === placement.item }"
       :style="{
         gridColumn: '1',
         gridRow: placement.row,
         left: `${placement.left}px`,
-        width: `${placement.item.len ? Math.max(0, placement.width - 4) : placement.width}px`,
-        overflowWrap: 'anywhere',
+        width: `${placement.width}px`,
+        '--annotation-shade':
+          hovered === placement.item ? 'var(--color-slate-200)' : 'var(--color-slate-100)',
       }"
       :title="placement.item.text"
       @pointerenter="hovered = placement.item"
       @pointerleave="hovered = null"
     >
-      <p class="min-w-0" :class="{ 'whitespace-nowrap': placement.item.kind === 'timing' }">
+      <template v-if="placement.item.len">
+        <span
+          data-annotation-background
+          class="pointer-events-none absolute inset-y-0"
+          :class="{
+            'rounded-l-xl': !placement.continuesBefore,
+            'rounded-r-xl': !placement.continuesAfter,
+          }"
+          :style="{
+            left: `${placement.spanLeft + 2}px`,
+            width: `${Math.max(0, placement.spanWidth - 4)}px`,
+            backgroundColor: 'var(--annotation-shade)',
+          }"
+        ></span>
+        <span
+          data-annotation-underline
+          class="pointer-events-none absolute bottom-0 h-[2px]"
+          :style="{
+            left: `${placement.captionLeft + rem * 0.5}px`,
+            width: `${Math.max(0, placement.captionWidth - rem)}px`,
+            backgroundColor: 'var(--annotation-shade)',
+          }"
+        ></span>
+      </template>
+      <p
+        data-annotation-caption
+        class="relative min-w-0"
+        :class="[
+          { 'whitespace-nowrap': !placement.wrap },
+          placement.item.len
+            ? 'px-2'
+            : placement.item.kind === 'timing'
+              ? ['rounded-xl px-2', hovered === placement.item ? 'bg-slate-300' : 'bg-slate-200']
+              : { 'bg-slate-100': hovered === placement.item },
+        ]"
+        :style="{
+          left: `${placement.captionLeft}px`,
+          width: `${placement.captionWidth}px`,
+          overflowWrap: 'anywhere',
+        }"
+      >
         <span :class="{ 'font-bold': placement.item.kind === 'chord' }">{{
           placement.item.text
         }}</span>
@@ -114,7 +140,8 @@ const placements = computed(() => {
           v-if="placement.item.timing && !placement.continuesBefore"
           data-annotation-kind="timing"
           :data-annotation-start="placement.item.at"
-          class="font-normal whitespace-nowrap text-slate-600"
+          class="font-normal text-slate-600"
+          :class="{ 'whitespace-nowrap': !placement.wrap }"
         >
           · {{ placement.item.timing }}
         </span>

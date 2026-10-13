@@ -16,11 +16,11 @@ converter in the application. Use temporary conversion code when useful.
   named movement unless the user asks for an excerpt. A view initially showing
   a few measures must not determine transcription coverage.
 - Use this project's `Note` and `Score` types in `src/music.ts` as the format
-  authority. Read an existing `src/scores/` asset and the view/playback consumers
+  authority. Read an existing `public/scores/` asset and the view/playback consumers
   before converting a new piece. Read the
   [score conventions](note-events.md) for timing and presentation constraints;
   do not maintain a duplicate schema in this skill.
-- Save the completed score as `src/scores/<work>-<movement>.json`. Follow the
+- Save the completed score as `public/scores/<work>-<movement>.json`. Follow the
   existing `sources/` layout for provenance when retaining the source. Wire the
   asset into the demo only when the request includes application integration.
 - Prefer a symbolic score for the intended edition over a performance-derived
@@ -58,8 +58,10 @@ voice into one held event; preserve repeated attacks as separate events. Rests
 advance time without sounding. Preserve pickups, trailing silence, and the
 requested repeat/ending sequence. Do not substitute slurs for ties.
 
-Keep score time distinct from performance timing. Store exact rhythmic values;
-do not bake a chosen BPM, rubato, or pedal sustain into note lengths. Preserve
+Store exact rhythmic values; do not bake a chosen BPM, rubato, or pedal sustain
+into note lengths. For grace notes, use the project's explicit timed-event
+convention in [score conventions](note-events.md#grace-notes), including its
+documented playback timing choice. Preserve
 source performance instructions as annotations where supported, and distinguish
 any added harmonic analysis from source information.
 

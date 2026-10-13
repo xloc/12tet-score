@@ -80,11 +80,12 @@ export function annotationPlacements(
     .map((item) => {
       const spanLeft = position(Math.max(from, item.at));
       const spanRight = item.len ? position(Math.min(to, item.at + item.len)) : spanLeft;
-      const captionWidth = textWidth(item, item.at < from);
-      const left =
-        item.kind === 'timing' ? Math.max(0, Math.min(spanLeft, width - captionWidth)) : spanLeft;
-      const boxWidth = item.len ? spanRight - spanLeft : Math.min(width - left, captionWidth);
-      const right = left + boxWidth;
+      const naturalWidth = textWidth(item, item.at < from);
+      const captionWidth = Math.min(width, naturalWidth);
+      const captionLeft = Math.max(0, Math.min(spanLeft, width - captionWidth));
+      const captionRight = captionLeft + captionWidth;
+      const left = Math.min(spanLeft, captionLeft);
+      const right = Math.max(spanRight, captionRight);
       let row = occupied.findIndex((lane) =>
         lane.every(
           (other) =>
@@ -104,14 +105,18 @@ export function annotationPlacements(
         item,
         left,
         right,
-        captionRight: left + Math.min(boxWidth, captionWidth),
+        captionRight,
       });
       return {
         item,
         row: row + 1,
         left,
-        width: boxWidth,
+        width: right - left,
+        spanLeft: spanLeft - left,
         spanWidth: spanRight - spanLeft,
+        captionLeft: captionLeft - left,
+        captionWidth,
+        wrap: naturalWidth > width,
         continuesBefore: item.at < from,
         continuesAfter: !!item.len && item.at + item.len > to,
       };

@@ -3,6 +3,7 @@ export type Note = {
   at: number;
   len: number;
   groups: string[];
+  grace?: true;
   finger?: 1 | 2 | 3 | 4 | 5;
   text?: string;
 };
@@ -32,6 +33,8 @@ export type Score = {
   composer: string;
   collection: string;
   ppq: number;
+  pickup?: number; // Ticks in the opening pickup measure.
+  duration?: number; // Total ticks, including trailing rests.
   tempos: Tempo[];
   meters: Meter[];
   source: { name: string; url: string; scoreUrl: string; license: string; reference: string };
@@ -65,6 +68,7 @@ export function chordLabel(chord: Pick<Chord, 'root' | 'type' | 'bass'>) {
 export function scoreDuration(score: Score) {
   return Math.max(
     0,
+    score.duration ?? 0,
     ...[
       ...score.notes,
       ...score.annotations,

@@ -28,6 +28,7 @@ export type ScoreLayout = {
   ppq: number;
   meters: Meter[];
   sections?: Section[];
+  pickup?: number;
   width: number;
   rem: number;
   foldThreshold: number;
@@ -59,6 +60,7 @@ export function scoreLines(
     ppq,
     meters,
     sections = [],
+    pickup = 0,
     width: viewportWidth,
     rem,
     foldThreshold,
@@ -71,7 +73,7 @@ export function scoreLines(
   const normalWidth = (ticksPerBar / ppq) * 8 * rem;
   const availableWidth = viewportWidth || normalWidth;
   const barsPerLine = Math.max(1, Math.floor(availableWidth / normalWidth));
-  const bars = scoreBars(totalTicks, ppq, meters, sections).map(
+  const bars = scoreBars(totalTicks, ppq, meters, sections, pickup).map(
     ({ from, to, number, meter, beatTicks }) => {
       const duration = to - from;
       const barNotes = indexedNotes.filter(({ note }) => note.at < to && note.at + note.len > from);
@@ -105,21 +107,30 @@ export function scoreLines(
           ]),
         ]),
       ].sort((a, b) => a - b);
-      const shortest = Math.min(...events.slice(1).map((at, index) => at - events[index]!));
+      const intervals = events.slice(1).map((at, index) => ({
+        len: at - events[index]!,
+        grace: sounding.some(
+          (note) => note.grace && note.at <= events[index]! && note.at + note.len >= at,
+        ),
+      }));
       const minimum = Math.max(
         (duration / ppq) * 1.5 * rem,
-        (duration / shortest) * 1.5 * rem,
+        ...intervals.map(
+          (interval) => (duration / interval.len) * (interval.grace ? 0.25 : 1.5) * rem,
+        ),
         ...sounding.map(
           (note) =>
             (duration / Math.min(note.len, duration)) *
-            (pitchLabel(note.pitch).length * 0.5 + 0.25) *
+            (note.grace ? 0.25 : pitchLabel(note.pitch).length * 0.5 + 0.25) *
             rem,
         ),
       );
       const preferred = Math.max(
         minimum,
         (duration / ppq) * 2 * rem,
-        (duration / shortest) * 2 * rem,
+        ...intervals.map(
+          (interval) => (duration / interval.len) * (interval.grace ? 0.25 : 2) * rem,
+        ),
       );
       return { from, to, number, meter, minimum, preferred, notes: barNotes, beats };
     },

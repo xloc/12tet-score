@@ -93,6 +93,22 @@ function advance(context: TestAudioContext, time: number) {
 
 const held: Note = { pitch: 60, at: 0, len: 1920, groups: ['rh', '1'] };
 
+test('timed grace notes sound in sequence before their principal note', async () => {
+  const notes: Note[] = [
+    { pitch: 65, at: 0, len: 30, groups: ['rh'], grace: true },
+    { pitch: 69, at: 30, len: 450, groups: ['rh'] },
+  ];
+  await playback.play(notes, 0, 480);
+  const context = contexts[0]!;
+  expect(context.oscillators).toHaveLength(2);
+  expect(context.oscillators[0]!.frequency.value).toBeCloseTo(349.228);
+  expect(context.oscillators[0]!.starts[0]).toBeCloseTo(0.03);
+  expect(context.oscillators[0]!.finishes[0]).toBeCloseTo(0.0925);
+  expect(context.oscillators[1]!.frequency.value).toBe(440);
+  expect(context.oscillators[1]!.starts[0]).toBeCloseTo(0.0925);
+  expect(context.oscillators[1]!.finishes[0]).toBeCloseTo(1.03);
+});
+
 test('playback from a moved playhead clips held notes and excludes notes outside the interval', async () => {
   await playback.play(
     [

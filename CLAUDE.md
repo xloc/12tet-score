@@ -10,6 +10,7 @@ Follow established best practices when they make the code or project simpler. Ig
 
 - **No visual styling.** Don't add visual styles (padding, margin, colors, borders, shadows, fonts, etc.) — whether via Tailwind classes, inline styles, CSS, SVG positioning, or any other mechanism. Do not try to bypass this rule by moving style-like decisions into another format. Only use layout primitives: like `display`, `flex`, `grid`, `position`, `width`/`height`/`overflow` for structural layout. The user has their own taste and will style things themselves.
 - **Single source of truth.** Define data, types, and configuration in one place. Derive everything else from the source. Use Pinia for shared state across components.
+- **Tests own their data.** Define test inputs inline or under `tests/`. Never load score data from `public/`.
 - **Direct mapping from input → actions.** Avoid intermediate representations unless they reduce total code and duplication.
 - **Avoid encode/decode round-trips.** Don't transform data just to reconstruct it later. Keep information in the form that will be consumed.
 - **Use recursion only when it simplifies code.**
