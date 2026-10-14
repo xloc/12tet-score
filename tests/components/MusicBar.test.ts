@@ -3,7 +3,7 @@ import { createSSRApp, h } from 'vue';
 import { renderToString } from 'vue/server-renderer';
 import { scoreLines } from '../../src/layout';
 import MusicBar from '../../src/components/MusicBar.vue';
-import type { Note } from '../../src/music';
+import type { TimedNote as Note } from '../../src/music';
 
 test('grace notes render selectable note bars without labels or connectors', async () => {
   const notes: Note[] = [

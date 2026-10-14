@@ -20,6 +20,20 @@ const notes: Note[] = [
   { pitch: 72, at: 960, len: 480, groups: ['rh', '1'] },
 ];
 
+test('opening lead-ins do not offset the beat-selection grid', () => {
+  const line = {
+    left: 0,
+    top: 0,
+    right: 510,
+    bottom: 100,
+    from: -30,
+    to: 480,
+    bars: [{ left: 0, right: 510, from: -30, to: 480 }],
+  };
+  assert.equal(tickAtPoint({ x: 30, y: 50 }, [line], 480), 0);
+  assert.equal(tickAtPoint({ x: 150, y: 50 }, [line], 480), 120);
+});
+
 test('time selection follows wrapped lines, including a shorter final line', () => {
   const lines = [
     { left: 0, top: 0, right: 800, bottom: 200, from: 0, to: 3840 },

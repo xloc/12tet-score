@@ -3,7 +3,63 @@ import { createSSRApp } from 'vue';
 import { renderToString } from 'vue/server-renderer';
 import type { Note } from '../../src/music';
 import MusicNotation from '../../src/components/MusicNotation.vue';
-import { notationProps } from '../helpers/score';
+import { createScore, notationProps } from '../helpers/score';
+
+test('whole-piece directions appear once above the score while passage and note instructions stay at their scope', async () => {
+  const html = await renderToString(
+    createSSRApp(MusicNotation, {
+      score: createScore({
+        title: 'A quiet tune',
+        instructions: ['Slowly', 'With feeling'],
+        notes: [
+          { pitch: 60, at: 0, len: 480, groups: [], text: 'Stress this note' },
+          { pitch: 64, at: 1920, len: 480, groups: [] },
+        ],
+        annotations: [{ at: 480, len: 1440, text: 'Get louder' }],
+      }),
+      totalTicks: 3840,
+      foldThreshold: 0,
+      variableBarWidth: false,
+      playhead: 0,
+      playing: false,
+      selection: { kind: 'notes', indices: [] },
+    }),
+  );
+  const header = html.match(/<header\b[^>]*>[\s\S]*?<\/header>/)![0];
+  expect(header).toContain('<h1>A quiet tune</h1>');
+  expect(header).toContain('Slowly');
+  expect(header).toContain('With feeling');
+  expect(header).not.toContain('Get louder');
+  expect(header).not.toContain('Stress this note');
+  expect(header).toContain('data-label-obstacle');
+  expect(html.indexOf(header)).toBeLessThan(html.indexOf('data-score-line'));
+  expect(html.match(/Slowly/g)).toHaveLength(1);
+  expect(html.match(/With feeling/g)).toHaveLength(1);
+  expect(html.match(/data-score-line/g)).toHaveLength(2);
+  const note = html.match(/<button\b[^>]*data-note-index="0"[^>]*>[\s\S]*?<\/button>/)![0];
+  expect(note).toContain('Stress this note');
+  expect(note).not.toContain('Get louder');
+  const passage = html.match(/<div\b[^>]*data-annotation-start="480"[^>]*>/)![0];
+  expect(passage).toContain('data-annotation-interval');
+  expect(passage).toContain('Get louder');
+});
+
+test('a score without whole-piece directions still shows its title', async () => {
+  const html = await renderToString(
+    createSSRApp(MusicNotation, {
+      score: createScore({ title: 'Just a title' }),
+      totalTicks: 0,
+      foldThreshold: 0,
+      variableBarWidth: false,
+      playhead: 0,
+      playing: false,
+      selection: { kind: 'notes', indices: [] },
+    }),
+  );
+  const header = html.match(/<header\b[^>]*>[\s\S]*?<\/header>/)![0];
+  expect(header).toContain('<h1>Just a title</h1>');
+  expect(header).not.toContain('<p');
+});
 
 test('wrapped notation shows both segments of a held note with the same selection identity', async () => {
   const notes: Note[] = [

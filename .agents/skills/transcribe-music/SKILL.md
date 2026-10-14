@@ -23,6 +23,8 @@ converter in the application. Use temporary conversion code when useful.
 - Save the completed score as `public/scores/<work>-<movement>.json`. Follow the
   existing `sources/` layout for provenance when retaining the source. Wire the
   asset into the demo only when the request includes application integration.
+  Follow the [JSON writing format](note-events.md#json-writing-format) for compact
+  entries throughout the score, not just notes.
 - Prefer a symbolic score for the intended edition over a performance-derived
   file when the goal is written notation. Keep the source link, edition or
   reference identifier, and known license. Label an unknown edition as unknown.
@@ -59,11 +61,27 @@ advance time without sounding. Preserve pickups, trailing silence, and the
 requested repeat/ending sequence. Do not substitute slurs for ties.
 
 Store exact rhythmic values; do not bake a chosen BPM, rubato, or pedal sustain
-into note lengths. For grace notes, use the project's explicit timed-event
-convention in [score conventions](note-events.md#grace-notes), including its
-documented playback timing choice. Preserve
-source performance instructions as annotations where supported, and distinguish
-any added harmonic analysis from source information.
+into note lengths. Nest grace notes in the specific main note they decorate,
+following [score conventions](note-events.md#grace-notes). Preserve the main
+note's original onset and full duration; playback derives any borrowing.
+Resolve mordents, inverted mordents, and turns into nested pitch sequences using the
+[ornament convention](note-events.md#ornaments), rather than text captions.
+Preserve source performance instructions and
+distinguish any added harmonic analysis from source information.
+
+## Write reader instructions
+
+Use short, plain-language performance instructions in the reader's requested
+language; use English until another language is requested. Translate the intended
+action rather than copying music terminology or abbreviations. Keep work titles,
+composer names, pitch names, and source references accurate.
+
+Choose the instruction's scope from its meaning in the source, not the note it
+is printed beside. Whole-piece directions belong in the centered title area;
+passage directions, note instructions, and pedal actions use their corresponding
+fields. Read [reader instructions](note-events.md#reader-instructions) for the
+scope rules and initial English mappings. Preserve specific meaning when a
+shorter label would be ambiguous; discuss uncertain mappings instead of guessing.
 
 If the target format or renderer cannot express a source feature faithfully,
 identify that limitation rather than rounding, discarding it, or redesigning the
@@ -77,9 +95,17 @@ app silently. Make schema or interface changes only within the user's request.
 - Independently compare the opening, closing, and a representative passage with
   ties, accidentals, or overlapping voices against the source. Confirm that the
   final requested measure is present; derive counts from the resulting data.
+- Check that reader instructions use plain language, the correct scope and
+  source-grounded start/end positions, without duplicating them on notes or in
+  the title area. Do not infer a passage's end from the attached note's duration.
+- Verify each ornament's owning note, relative position, pitch steps, and any
+  explicit total length or rhythm weights. Playing or omitting the derived quick
+  events must preserve main-note matching, chord positions, and bar-jump locations.
 - Run the relevant existing data and type checks. When application integration
   is requested, confirm it loads the completed asset and displays the requested
   range. Do not change unrelated application behavior.
+- Run the existing formatter on the authored score. For formatting-only rewrites,
+  verify that parsed values, array order, and property order remain unchanged.
 - Deliver the score asset and provenance. Report coverage, note/voice counts,
   and any unresolved source or playback limitations. Identify a chosen demo
   tempo as a playback choice unless it comes from the source.

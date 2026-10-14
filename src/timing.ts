@@ -66,10 +66,11 @@ export function validateTempos(tempos: Tempo[]) {
 }
 
 export function tempoAt(tempos: Tempo[], tick: number) {
-  return tempos.filter((tempo) => tempo.at <= tick).at(-1)!;
+  return (tempos.filter((tempo) => tempo.at <= tick).at(-1) ?? tempos[0])!;
 }
 
 export function secondsAt(tick: number, tempos: Tempo[], ppq: number, speed = 1) {
+  if (tick < 0) return seconds(tick, tempos[0]!.bpm * speed, ppq);
   let elapsed = 0;
   for (const [index, tempo] of tempos.entries()) {
     if (tempo.at >= tick) break;
@@ -80,6 +81,7 @@ export function secondsAt(tick: number, tempos: Tempo[], ppq: number, speed = 1)
 }
 
 export function tickAtSeconds(elapsed: number, tempos: Tempo[], ppq: number, speed = 1) {
+  if (elapsed < 0) return (elapsed * tempos[0]!.bpm * speed * ppq) / 60;
   for (const [index, tempo] of tempos.entries()) {
     const next = tempos[index + 1];
     const duration = next ? seconds(next.at - tempo.at, tempo.bpm * speed, ppq) : Infinity;

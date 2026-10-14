@@ -15,7 +15,9 @@ const { score, barCount, selectedNotes, span } = storeToRefs(useScoreStore());
 const settings = useTemplateRef<InstanceType<typeof SettingsDialog>>('settings');
 const playback = usePlaybackStore();
 const meter = computed(
-  () => score.value?.meters.filter((meter) => meter.at <= playback.currentTick).at(-1)?.meter,
+  () =>
+    score.value?.meters.filter((meter) => meter.at <= Math.max(0, playback.currentTick)).at(-1)
+      ?.meter,
 );
 const tempo = computed(() =>
   score.value ? tempoAt(score.value.tempos, playback.currentTick).bpm : 0,

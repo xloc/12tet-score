@@ -138,7 +138,7 @@ test('normal play uses the playhead while play selection uses only the selected 
     });
     await renderToString(app);
     await actions.get('Play')!();
-    expect(play).toHaveBeenLastCalledWith(sheet.score!.notes, 480, sheet.totalTicks);
+    expect(play).toHaveBeenLastCalledWith(sheet.notes, 480, sheet.totalTicks);
     await actions.get('Play selection')!();
     expect(play).toHaveBeenLastCalledWith(sheet.selectedNotes, sheet.span!.from, sheet.span!.to);
     play.mockRestore();

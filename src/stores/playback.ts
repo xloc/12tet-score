@@ -1,6 +1,6 @@
 import { computed, ref, watch } from 'vue';
 import { acceptHMRUpdate, defineStore } from 'pinia';
-import type { Note } from '../music.ts';
+import type { PlayedNote } from '../music.ts';
 import { secondsAt, tickAtSeconds } from '../timing';
 import { useScoreStore } from './score.ts';
 
@@ -13,7 +13,7 @@ export const usePlaybackStore = defineStore('playback', () => {
   const currentTick = ref(0);
   let audio: AudioContext | undefined;
   let frame = 0;
-  let session: { notes: Note[]; to: number } | undefined;
+  let session: { notes: PlayedNote[]; to: number; leadIn?: boolean } | undefined;
   let updateTick = () => {};
 
   watch(
@@ -50,7 +50,7 @@ export const usePlaybackStore = defineStore('playback', () => {
 
   function resume() {
     if (!paused.value || !session) return;
-    return play(session.notes, currentTick.value, session.to);
+    return play(session.notes, currentTick.value, session.to, session.leadIn ?? false);
   }
 
   function seek(tick: number) {
@@ -62,16 +62,28 @@ export const usePlaybackStore = defineStore('playback', () => {
     session = undefined;
     currentTick.value = Math.max(0, Math.min(sheet.totalTicks, tick));
     if (currentTick.value === sheet.totalTicks) return;
-    if (wasPlaying) return play(score.notes, currentTick.value, sheet.totalTicks);
+    if (wasPlaying) return play(sheet.notes, currentTick.value, sheet.totalTicks);
     if (wasPaused) {
-      session = { notes: score.notes, to: sheet.totalTicks };
+      session = { notes: sheet.notes, to: sheet.totalTicks, leadIn: true };
       status.value = 'paused';
     }
   }
 
-  async function play(notes: Note[], from: number, to: number) {
+  async function play(notes: PlayedNote[], from: number, to: number, includeLeadIn = true) {
     if (!sheet.score) return;
     stopAudio();
+    if (includeLeadIn)
+      from = Math.min(
+        from,
+        ...notes
+          .filter(
+            (note) =>
+              note.grace &&
+              note.source.at === from &&
+              note.source.ornament?.timing === 'beforeStart',
+          )
+          .map((note) => note.at),
+      );
     currentTick.value = from;
     session = undefined;
     if (from >= to) return;

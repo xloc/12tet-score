@@ -23,7 +23,7 @@ function togglePlayback() {
   if (playback.playing) return playback.pause();
   if (playback.paused) return playback.resume();
   return playback.play(
-    score.value.notes,
+    sheet.notes,
     playback.currentTick < totalTicks.value ? playback.currentTick : 0,
     totalTicks.value,
   );

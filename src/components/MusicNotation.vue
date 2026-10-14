@@ -15,7 +15,8 @@ import AnnotationLane from './AnnotationLane.vue';
 import SustainLane from './SustainLane.vue';
 import { layoutPitchLabels, measureNotes, measureTimeLines } from '../geometry';
 import { scoreLines } from '../layout';
-import type { Annotation, Score } from '../music';
+import type { Annotation, PlayedNote, Score } from '../music';
+import { performedNotes } from '../ornaments';
 import { scoreAnnotations } from '../annotations';
 import {
   boxHits,
@@ -29,6 +30,7 @@ import {
 
 const props = defineProps<{
   score: Score;
+  notes?: PlayedNote[];
   totalTicks: number;
   foldThreshold: number;
   variableBarWidth: boolean;
@@ -42,12 +44,13 @@ const emit = defineEmits<{ select: [selection: MusicSelection]; seek: [tick: num
 
 const viewport = useTemplateRef<HTMLDivElement>('viewport');
 const surface = useTemplateRef<HTMLDivElement>('surface');
-const selected = computed(() => new Set(selectedIndices(props.score.notes, props.selection)));
+const notes = computed(() => props.notes ?? performedNotes(props.score));
+const selected = computed(() => new Set(selectedIndices(notes.value, props.selection)));
 
 const availableWidth = ref(0);
 const rem = ref(16);
 const lines = computed(() =>
-  scoreLines(props.score.notes, props.totalTicks, {
+  scoreLines(notes.value, props.totalTicks, {
     ppq: props.score.ppq,
     meters: props.score.meters,
     sections: props.score.sections,
@@ -165,12 +168,7 @@ function commitDrag(drag: SelectionDrag) {
   }
   emit(
     'select',
-    notesSelection(
-      props.score.notes,
-      props.selection,
-      [...indices],
-      drag.additive ? 'add' : 'replace',
-    ),
+    notesSelection(notes.value, props.selection, [...indices], drag.additive ? 'add' : 'replace'),
   );
 }
 
@@ -196,7 +194,7 @@ function selectNote(index: number, event: MouseEvent) {
     event.ctrlKey || event.shiftKey || ('pointerType' in event && event.pointerType === 'touch');
   emit(
     'select',
-    notesSelection(props.score.notes, props.selection, [index], toggle ? 'toggle' : 'replace'),
+    notesSelection(notes.value, props.selection, [index], toggle ? 'toggle' : 'replace'),
   );
 }
 
@@ -221,6 +219,12 @@ function clearSelection() {
       @click.self="clearSelection"
       @keydown.esc="clearSelection"
     >
+      <header data-score-header data-label-obstacle class="grid justify-items-center text-center">
+        <h1>{{ score.title }}</h1>
+        <p v-for="(instruction, index) in score.instructions" :key="index">
+          {{ instruction }}
+        </p>
+      </header>
       <div
         v-for="line in lines"
         :key="line.from"
@@ -234,7 +238,9 @@ function clearSelection() {
         @click.self="clearSelection"
       >
         <div
-          v-for="section in score.sections.filter((section) => section.at === line.from)"
+          v-for="section in score.sections.filter(
+            (section) => section.at === line.bars[0]?.beats[0]?.from,
+          )"
           :key="section.at"
           data-label-obstacle
           data-section

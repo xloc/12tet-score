@@ -3,6 +3,7 @@ import { createSSRApp } from 'vue';
 import { renderToString } from 'vue/server-renderer';
 import { followingWindow, ScoreFollower, type MatchResult } from '../../src/following';
 import { practiceScore } from '../helpers/score';
+import { ornamentScore } from '../helpers/ornaments';
 import { scoreBars } from '../../src/timing';
 import FollowingVisualization from '../../src/components/FollowingVisualization.vue';
 
@@ -12,6 +13,37 @@ const bars = scoreBars(8, 1, example.meters);
 function render(result: MatchResult | null, pitches: number[], focusBar = 1) {
   return renderToString(createSSRApp(FollowingVisualization, { result, pitches, bars, focusBar }));
 }
+
+test('recognized quick notes are shown as optional and excluded from the agreement counts', async () => {
+  const follower = new ScoreFollower(ornamentScore(), 7680);
+  const pitches = [60, 59, 60, 64, 65, 64];
+  const result = pitches.map((pitch) => follower.receive(pitch)).at(-1)!;
+  const html = await render(result, pitches);
+  expect(html).toContain('data-match-kind="grace"');
+  expect(html).toContain('optional quick note');
+  expect(html).toContain('2 matched, 0 extra, 0 omitted');
+});
+
+test('the displayed move gates agree with a main-note move over an optional prefix', async () => {
+  const score = ornamentScore();
+  const follower = new ScoreFollower(score, 7680);
+  const pitches = [60, 64, 67, 62, 69];
+  const result = pitches.map((pitch) => follower.receive(pitch)).at(-1)!;
+  expect(result.decision).toBe('advanced');
+  const html = await renderToString(
+    createSSRApp(FollowingVisualization, {
+      result,
+      pitches,
+      bars: scoreBars(score.duration!, score.ppq, score.meters),
+      focusBar: 6,
+    }),
+  );
+  expect([...html.matchAll(/data-gate-met="([^"]+)"/g)].map((match) => match[1])).toEqual([
+    'true',
+    'true',
+    'true',
+  ]);
+});
 
 test('a retry aligns its short evidence with the latest inputs rather than the abandoned prefix', async () => {
   const follower = new ScoreFollower(example);

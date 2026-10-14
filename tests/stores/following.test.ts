@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, expect, test, vi } from 'vite-plus/test';
 import { createPinia } from 'pinia';
 import { distantScore, practiceScore } from '../helpers/score';
+import { mainPitches, ornamentPitches, ornamentScore } from '../helpers/ornaments';
 import {
   FollowingSearch,
   type SearchRequest,
@@ -56,6 +57,14 @@ let input: {
 function message(pitch: number, status = 0x90, velocity = 100) {
   input.onmidimessage!({ data: new Uint8Array([status, pitch, velocity]) });
 }
+
+test('a paused opening lead-in keeps following in the first bar', () => {
+  playback.currentTick = -1;
+  expect(following.bar?.number).toBe(1);
+  message(60);
+  expect(following.result?.tick).toBe(0);
+  expect(playback.currentTick).toBe(0);
+});
 
 beforeEach(async () => {
   TestWorker.instances.length = 0;
@@ -283,6 +292,21 @@ test('automatic distant jumps require enabling the setting and create a return p
   expect(following.options[following.returnPoint!.index]).toBe(following.returnPoint!.candidate);
   expect(following.result?.decision).toBe('jumped');
 });
+
+test.each([{ pitches: mainPitches }, { pitches: ornamentPitches }])(
+  'MIDI jumps preserve the main anchor with full or omitted ornaments: $pitches',
+  ({ pitches }) => {
+    sheet.load(ornamentScore());
+    for (const pitch of pitches) message(pitch);
+    expect(worker.latest().pitches).toEqual(pitches);
+    worker.complete();
+    expect(playback.currentTick).toBe(0);
+    following.allowDistant = true;
+    expect(playback.currentTick).toBe(10080);
+    expect(following.bar?.number).toBe(6);
+    expect(following.result?.decision).toBe('jumped');
+  },
+);
 
 test('the latest selected jump replaces the return point', () => {
   sheet.load(distantScore);

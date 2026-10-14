@@ -3,6 +3,7 @@ import { computed, ref, watch } from 'vue';
 import { candidateSlots } from '../candidate-slots';
 import {
   compareMatches,
+  competesAt,
   followingWindow,
   matchStats,
   minimumMatches,
@@ -94,7 +95,12 @@ const lead = computed(() =>
   next.value
     ? Math.min(
         ...(props.result?.candidates ?? [])
-          .filter((candidate) => candidate.mode !== 'jump' && candidate.bar !== next.value!.bar)
+          .filter(
+            (candidate) =>
+              candidate.mode !== 'jump' &&
+              candidate.bar !== next.value!.bar &&
+              competesAt(candidate, next.value!.at),
+          )
           .map((candidate) => candidate.cost),
       ) - next.value.cost
     : 0,
@@ -126,7 +132,8 @@ function evidenceTitle(evidence: MatchEvidence | undefined) {
   const omitted = evidence.missed.length
     ? ` Omitted: ${evidence.missed.map(pitchLabel).join(', ')}.`
     : '';
-  return `${pitchLabel(evidence.pitch)}: ${evidence.kind === 'match' ? 'matched' : 'extra'} at ${position}.${omitted}`;
+  const meaning = { match: 'matched', extra: 'extra', grace: 'optional quick note' }[evidence.kind];
+  return `${pitchLabel(evidence.pitch)}: ${meaning} at ${position}.${omitted}`;
 }
 </script>
 
@@ -225,7 +232,7 @@ function evidenceTitle(evidence: MatchEvidence | undefined) {
                   fill="currentColor"
                 />
                 <circle
-                  v-else-if="cell?.kind === 'match'"
+                  v-else-if="cell?.kind === 'match' || cell?.kind === 'grace'"
                   cx="8"
                   cy="12"
                   r="4"

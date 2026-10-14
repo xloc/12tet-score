@@ -1,11 +1,12 @@
 import { computed, ref, watch } from 'vue';
 import { acceptHMRUpdate, defineStore } from 'pinia';
 import { scoreDuration, type Score, type ScoreEntry } from '../music.ts';
+import { performedNotes } from '../ornaments';
 import { scoreBars, validateTempos } from '../timing';
 import { selectedIndices, selectionSpan, type MusicSelection } from '../selection.ts';
 
 type OpenedScore = { file: string } | { score: Score };
-const savedScoreVersion = 1;
+const savedScoreVersion = 2;
 
 export const useScoreStore = defineStore('score', () => {
   let saved: {
@@ -40,15 +41,23 @@ export const useScoreStore = defineStore('score', () => {
   const foldThreshold = ref(saved.foldThreshold ?? 12);
   const variableBarWidth = ref(saved.variableBarWidth ?? false);
   const selection = ref<MusicSelection>({ kind: 'notes', indices: [] });
-  const selectedNotes = computed(() =>
-    score.value
-      ? selectedIndices(score.value.notes, selection.value).map(
-          (index) => score.value!.notes[index]!,
-        )
-      : [],
-  );
+  const notes = computed(() => (score.value ? performedNotes(score.value) : []));
+  const selectedNotes = computed(() => {
+    const selected = selectedIndices(notes.value, selection.value).map(
+      (index) => notes.value[index]!,
+    );
+    const owners = new Set(selected.filter((note) => !note.grace).map((note) => note.source));
+    return notes.value.filter(
+      (note) => selected.includes(note) || (note.grace && owners.has(note.source)),
+    );
+  });
   const span = computed(() =>
-    score.value ? selectionSpan(score.value.notes, selection.value) : null,
+    selection.value.kind === 'range'
+      ? { from: selection.value.from, to: selection.value.to }
+      : selectionSpan(selectedNotes.value, {
+          kind: 'notes',
+          indices: selectedNotes.value.map((_, index) => index),
+        }),
   );
   let request = 0;
 
@@ -76,6 +85,7 @@ export const useScoreStore = defineStore('score', () => {
     if (!Number.isFinite(next.ppq) || next.ppq <= 0) throw new Error('PPQ must be positive.');
     validateTempos(next.tempos);
     scoreBars(scoreDuration(next), next.ppq, next.meters, next.sections, next.pickup);
+    performedNotes(next);
     selection.value = { kind: 'notes', indices: [] };
     score.value = next;
     opened.value = file ? { file } : { score: next };
@@ -164,6 +174,7 @@ export const useScoreStore = defineStore('score', () => {
 
   return {
     score,
+    notes,
     catalog,
     loading,
     error,

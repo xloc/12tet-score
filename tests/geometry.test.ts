@@ -3,7 +3,7 @@ import { layoutPitchLabels, measureNotes, measureTimeLines } from '../src/geomet
 import { barPosition, scoreLines, timePlacement } from '../src/layout';
 import { placePitchLabels } from '../src/labels';
 import { boxHits, tickAtPoint, type Rect } from '../src/selection';
-import type { Note } from '../src/music';
+import type { TimedNote as Note } from '../src/music';
 
 function fixture(obstacles: Rect[] = [], graceIndices: number[] = []) {
   const held: Note = { pitch: 60, at: 1440, len: 2880, groups: ['lh', '3'] };

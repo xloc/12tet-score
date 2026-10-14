@@ -51,7 +51,7 @@ test('replacing the score updates timing and resets selection while retaining la
   expect(sheet.foldThreshold).toBe(6);
   expect(sheet.variableBarWidth).toBe(true);
   sheet.selection = { kind: 'range', from: 720, to: 960 };
-  expect(sheet.selectedNotes).toEqual(next.notes);
+  expect(sheet.selectedNotes.map(({ source }) => source)).toEqual(next.notes);
   expect(sheet.span).toEqual({ from: 720, to: 960 });
 });
 
@@ -312,7 +312,7 @@ test('a removed hosted score falls back to an available catalog entry after refr
   saved.set(
     'music-sheet-state',
     JSON.stringify({
-      version: 1,
+      version: 2,
       opened: { file: 'removed.json' },
       foldThreshold: 6,
     }),
@@ -374,7 +374,7 @@ test('a saved score remains available when the catalog cannot be fetched after r
 test('invalid saved JSON or an invalid saved score falls back to the default score', async () => {
   for (const state of [
     'invalid JSON',
-    JSON.stringify({ version: 1, opened: { score: { ppq: 0 } }, foldThreshold: 6 }),
+    JSON.stringify({ version: 2, opened: { score: { ppq: 0 } }, foldThreshold: 6 }),
   ]) {
     saved.set('music-sheet-state', state);
     const sheet = useScoreStore(createPinia());
@@ -406,7 +406,7 @@ test('old score caches are invalidated without losing the saved layout preferenc
   expect(sheet.foldThreshold).toBe(6);
   expect(sheet.variableBarWidth).toBe(true);
   expect(JSON.parse(saved.get('music-sheet-state')!)).toEqual({
-    version: 1,
+    version: 2,
     opened: { file: 'opening.json' },
     foldThreshold: 6,
     variableBarWidth: true,

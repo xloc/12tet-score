@@ -1,13 +1,18 @@
 import {
   compareMatches,
+  competesAt,
   distantJumpPolicy,
-  followingWindow,
+  followingPaths,
+  followingKey,
+  graceMatches,
+  advanceGrace,
+  appendEvidence,
   isDistant,
   minimumMatches,
   matchStats,
   type FollowingReference,
   type MatchCandidate,
-  type MatchEvidence,
+  type FollowingPath,
 } from './following';
 
 export function automaticLocation(
@@ -21,7 +26,9 @@ export function automaticLocation(
   const distant = isDistant(bar, best.bar);
   if (distant && !allowDistant) return;
   const stats = matchStats(best);
-  const other = sorted.find((candidate) => candidate.bar !== best.bar);
+  const other = sorted.find(
+    (candidate) => candidate.bar !== best.bar && competesAt(candidate, best.at),
+  );
   const lead = stats.support - (other ? matchStats(other).support : 0);
   const policy = distant
     ? distantJumpPolicy
@@ -45,18 +52,17 @@ export type SearchRequest =
   | { type: 'search'; generation: number; id: number; pitches: number[] };
 export type SearchResponse = { generation: number; id: number; candidates: MatchCandidate[] };
 
-type SearchPath = {
-  index: number;
-  matched: number[];
-  evidence: MatchEvidence[];
-};
+type SearchPath = FollowingPath;
 
 export class FollowingSearch {
   private byPitch = new Map<number, number[]>();
 
   constructor(private reference: FollowingReference) {
     for (const [index, event] of reference.events.entries()) {
-      for (const pitch of event.pitches) {
+      for (const pitch of new Set([
+        ...event.pitches,
+        ...(event.grace?.flatMap((sequence) => sequence.notes.flat()) ?? []),
+      ])) {
         if (!this.byPitch.has(pitch)) this.byPitch.set(pitch, []);
         this.byPitch.get(pitch)!.push(index);
       }
@@ -78,22 +84,21 @@ export class FollowingSearch {
         0,
       ),
       evidence: path.evidence,
+      ...(path.grace ? { grace: path.grace } : {}),
     });
 
-    for (const pitch of pitches.slice(-followingWindow)) {
+    for (const pitch of pitches.slice(-this.reference.inputWindow)) {
       const expanded = new Map<number, SearchPath[]>();
       const add = (path: SearchPath) => {
         const existing = expanded.get(path.index) ?? [];
-        const same = existing.findIndex(
-          (item) => item.matched.join(',') === path.matched.join(','),
-        );
+        const same = existing.findIndex((item) => followingKey(item) === followingKey(path));
         if (same >= 0) {
           if (compareMatches(candidate(path), candidate(existing[same]!)) >= 0) return;
           existing.splice(same, 1);
         }
         existing.push(path);
         existing.sort((a, b) => compareMatches(candidate(a), candidate(b)));
-        expanded.set(path.index, existing.slice(0, 2));
+        expanded.set(path.index, existing.slice(0, followingPaths));
       };
       const match = (path: SearchPath, missed: number[] = []) => {
         const event = this.reference.events[path.index]!;
@@ -101,10 +106,12 @@ export class FollowingSearch {
         add({
           ...path,
           matched: [...path.matched, pitch].sort((a, b) => a - b),
-          evidence: [
-            ...path.evidence,
-            { pitch, at: event.at, kind: 'match' as const, missed: [...missed] },
-          ].slice(-followingWindow),
+          grace: advanceGrace(this.reference, path.grace, path.index),
+          evidence: appendEvidence(
+            path.evidence,
+            { pitch, at: event.at, kind: 'match', missed: [...missed] },
+            this.reference.inputWindow,
+          ),
         });
       };
 
@@ -112,12 +119,14 @@ export class FollowingSearch {
         const event = this.reference.events[path.index]!;
         add({
           ...path,
-          evidence: [
-            ...path.evidence,
-            { pitch, at: event.at, kind: 'extra' as const, missed: [] },
-          ].slice(-followingWindow),
+          evidence: appendEvidence(
+            path.evidence,
+            { pitch, at: event.at, kind: 'extra', missed: [] },
+            this.reference.inputWindow,
+          ),
         });
         match(path);
+        for (const optional of graceMatches(this.reference, path, pitch)) add(optional);
         const missed = event.pitches.filter((note) => !path.matched.includes(note));
         for (let index = path.index + 1; index <= path.index + 3; index++) {
           const target = this.reference.events[index];
@@ -128,7 +137,9 @@ export class FollowingSearch {
         if (++work % 128 === 0) yield;
       }
       for (const index of this.byPitch.get(pitch) ?? []) {
-        match({ index, matched: [], evidence: [] });
+        const path = { index, matched: [], evidence: [] };
+        match(path);
+        for (const optional of graceMatches(this.reference, path, pitch, index)) add(optional);
         if (++work % 128 === 0) yield;
       }
       paths = [...expanded.values()].flat();

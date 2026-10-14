@@ -1,4 +1,4 @@
-import { pitchLabel, type Meter, type Note, type Section } from './music';
+import { pitchLabel, type Meter, type TimedNote, type Section } from './music';
 import { scoreBars } from './timing';
 
 export type PitchRow = number | { from: number; to: number };
@@ -10,7 +10,7 @@ export type ScoreBar = {
   preferred: number;
   number: number;
   meter: string;
-  notes: { note: Note; index: number }[];
+  notes: { note: TimedNote; index: number }[];
   beats: { from: number; to: number; number: number; bar: number }[];
 };
 export type ScoreLine = {
@@ -19,7 +19,7 @@ export type ScoreLine = {
   minimum: number;
   maximum: number | undefined;
   bars: ScoreBar[];
-  notes: { note: Note; index: number }[];
+  notes: { note: TimedNote; index: number }[];
   rows: PitchRow[];
   bands: { from: number; to: number }[];
 };
@@ -54,7 +54,7 @@ export function pitchRows(pitches: number[], foldThreshold: number): PitchRow[] 
 }
 
 export function scoreLines(
-  notes: Note[],
+  notes: TimedNote[],
   totalTicks: number,
   {
     ppq,
@@ -75,11 +75,13 @@ export function scoreLines(
   const barsPerLine = Math.max(1, Math.floor(availableWidth / normalWidth));
   const bars = scoreBars(totalTicks, ppq, meters, sections, pickup).map(
     ({ from, to, number, meter, beatTicks }) => {
+      const scoreFrom = from;
+      if (from === 0) from = Math.min(0, ...notes.map((note) => note.at));
       const duration = to - from;
       const barNotes = indexedNotes.filter(({ note }) => note.at < to && note.at + note.len > from);
-      const beats = Array.from({ length: Math.ceil(duration / beatTicks) }, (_, beat) => ({
-        from: from + beat * beatTicks,
-        to: Math.min(from + (beat + 1) * beatTicks, to),
+      const beats = Array.from({ length: Math.ceil((to - scoreFrom) / beatTicks) }, (_, beat) => ({
+        from: scoreFrom + beat * beatTicks,
+        to: Math.min(scoreFrom + (beat + 1) * beatTicks, to),
         bar: number,
         number: beat + 1,
       }));
@@ -194,7 +196,7 @@ export function timePlacement(from: number, to: number, bar: Pick<ScoreBar, 'fro
   return { left: `${left * 100}%`, width: `${(barPosition(to, bar) - left) * 100}%` };
 }
 
-export function notePlacement(note: Note, line: ScoreLine, bar: ScoreBar) {
+export function notePlacement(note: TimedNote, line: ScoreLine, bar: ScoreBar) {
   return {
     gridRow: line.rows.indexOf(note.pitch) + 1,
     gridColumn: '1 / -1',

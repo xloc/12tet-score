@@ -2,7 +2,6 @@ import { computed, onScopeDispose, ref, shallowRef, watch } from 'vue';
 import { acceptHMRUpdate, defineStore } from 'pinia';
 import {
   compareMatches,
-  followingWindow,
   isDistant,
   matchStats,
   ScoreFollower,
@@ -39,8 +38,9 @@ export const useFollowingStore = defineStore('following', () => {
   const recentPitches = ref<number[]>([]);
   const bar = computed(
     () =>
-      sheet.bars.find((bar) => playback.currentTick >= bar.from && playback.currentTick < bar.to) ??
-      sheet.bars.at(-1),
+      sheet.bars.find(
+        (bar) => Math.max(0, playback.currentTick) >= bar.from && playback.currentTick < bar.to,
+      ) ?? sheet.bars.at(-1),
   );
   const active = computed(
     () => enabled.value && !!sheet.score && !!midi.connectedCount && !playback.playing,
@@ -204,7 +204,7 @@ export const useFollowingStore = defineStore('following', () => {
   const stopNotes = midi.onNoteOn((pitch) => {
     if (!active.value || !matcher) return;
     retainedOptions.value = null;
-    recentPitches.value = [...recentPitches.value, pitch].slice(-followingWindow);
+    recentPitches.value = [...recentPitches.value, pitch].slice(-matcher.reference.inputWindow);
     result.value = matcher.receive(pitch);
     const match = result.value;
     if (match.tick !== undefined) move(match.tick, match.decision, match.reason);

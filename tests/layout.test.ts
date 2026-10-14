@@ -7,7 +7,7 @@ import {
   timePlacement,
   type ScoreLayout,
 } from '../src/layout';
-import type { Note } from '../src/music';
+import type { TimedNote as Note } from '../src/music';
 import { tickAtPoint } from '../src/selection';
 import { fixedGeometry, positionAtTick } from './helpers/score';
 

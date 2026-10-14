@@ -34,6 +34,7 @@ onBeforeUnmount(() => {
       v-if="sheet.score"
       ref="notation"
       :score="sheet.score"
+      :notes="sheet.notes"
       :total-ticks="sheet.totalTicks"
       :fold-threshold="sheet.foldThreshold"
       :variable-bar-width="sheet.variableBarWidth"

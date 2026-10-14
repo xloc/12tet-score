@@ -1,12 +1,22 @@
+export type Ornament = {
+  timing: 'beforeStart' | 'atStart' | 'beforeEnd';
+  pitches: (number | number[])[];
+  len?: number; // Total ticks for the whole group.
+  rhythm?: number[]; // Relative duration of each step.
+};
+
 export type Note = {
   pitch: number;
   at: number;
   len: number;
   groups: string[];
-  grace?: true;
+  ornament?: Ornament;
   finger?: 1 | 2 | 3 | 4 | 5;
   text?: string;
 };
+
+export type TimedNote = Omit<Note, 'ornament'> & { grace?: true };
+export type PlayedNote = TimedNote & { source: Note };
 
 export type NoteGroup = { id: string; name: string } & (
   | { kind: 'hand'; hand: 'left' | 'right' }
@@ -30,6 +40,7 @@ export type Section = { at: number; title: string; text?: string };
 
 export type Score = {
   title: string;
+  instructions?: string[]; // Plain-language directions for the whole piece.
   composer: string;
   collection: string;
   ppq: number;

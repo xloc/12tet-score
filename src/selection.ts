@@ -20,9 +20,10 @@ export function tickAtPoint(point: Point, lines: TimeLine[], ppq: number) {
   const fraction = Math.max(0, Math.min(1, (point.x - bar.left) / (bar.right - bar.left)));
   const tick = bar.from + fraction * (bar.to - bar.from);
   const cell = ppq / 4;
+  const gridStart = Math.max(0, line.from);
   return Math.max(
     line.from,
-    Math.min(line.to, line.from + Math.round((tick - line.from) / cell) * cell),
+    Math.min(line.to, gridStart + Math.round((tick - gridStart) / cell) * cell),
   );
 }
 

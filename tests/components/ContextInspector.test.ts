@@ -41,6 +41,27 @@ test('no selection shows whole-piece context using the score default tempo', asy
   expect(panel).toContain('title="Settings"');
 });
 
+test('opening lead-in displays the initial tempo and meter', async () => {
+  const pinia = createPinia();
+  useScoreStore(pinia).load(
+    createScore({
+      notes: [
+        {
+          pitch: 60,
+          at: 0,
+          len: 480,
+          groups: [],
+          ornament: { timing: 'beforeStart', pitches: [62], len: 60 },
+        },
+      ],
+    }),
+  );
+  usePlaybackStore(pinia).currentTick = -60;
+  const html = await renderToString(createSSRApp(ContextInspector).use(pinia));
+  expect(textContent(html)).toMatch(/TEMPO\s*60 BPM/);
+  expect(textContent(html)).toMatch(/METER\s*4\/4/);
+});
+
 test('one note shows its pitch and selection count without position or duration', async () => {
   const score = createScore({ notes: [{ pitch: 60, at: 0, len: 480, groups: [] }] });
   const { panel, fields } = await renderInfo(score, { kind: 'notes', indices: [0] });
@@ -131,5 +152,5 @@ test('MIDI stays available without a score and does not change the score selecti
   expect(html).toContain('NOTE');
   expect(html).toContain('C4');
   expect(sheet.selection).toEqual({ kind: 'notes', indices: [0] });
-  expect(sheet.selectedNotes).toEqual([note]);
+  expect(sheet.selectedNotes.map(({ source }) => source)).toEqual([note]);
 });
