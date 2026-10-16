@@ -58,8 +58,6 @@ export type Score = {
   sections: Section[];
 };
 
-export type ScoreEntry = Pick<Score, 'title' | 'composer'> & { file: string };
-
 export const pitchNames = ['C', 'C♯', 'D', 'D♯', 'E', 'F', 'F♯', 'G', 'G♯', 'A', 'A♯', 'B'];
 
 export function pitchLabel(pitch: number) {

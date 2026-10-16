@@ -213,13 +213,13 @@ test('the app keeps the load dialog available while the initial public score is 
     ),
   );
   try {
-    const loading = sheet.loadHosted('missing.json');
+    const loading = sheet.open({ sourceId: 'builtin', scoreId: 'missing' });
     const pending = await renderToString(createSSRApp(App).use(pinia));
     expect(pending).toContain('Loading score…');
     expect(pending).toContain('title="Settings"');
     expect(pending).not.toContain('data-note-index');
     expect(pending.match(/<dialog\b/g)).toHaveLength(3);
-    expect(pending).toContain('accept=".json,application/json"');
+    expect(pending).toContain('My scores');
     const scorePanel = pending
       .match(/<section\b[^>]*>[\s\S]*?<\/section>/g)!
       .find((panel) => panel.includes('No score loaded'));
@@ -227,7 +227,7 @@ test('the app keeps the load dialog available while the initial public score is 
     ready(new Response('', { status: 404 }));
     expect(await loading).toBe(false);
     const failed = await renderToString(createSSRApp(App).use(pinia));
-    expect(failed).toContain('Could not load score (404).');
+    expect(failed).toContain('Could not load JSON (404).');
     expect(failed).toContain('Load score');
     expect(failed).toContain('title="Settings"');
     expect(failed).not.toContain('data-note-index');

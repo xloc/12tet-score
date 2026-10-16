@@ -3,18 +3,20 @@ import { basename, dirname, join } from 'node:path';
 import tailwindcss from '@tailwindcss/vite';
 import vue from '@vitejs/plugin-vue';
 import { defineConfig, type Plugin } from 'vite-plus';
-import type { Score, ScoreEntry } from './src/music';
+import type { Score } from './src/music';
+import type { ScoreCatalog } from './src/library';
 
 function scoreCatalog(directory: string) {
-  const entries: ScoreEntry[] = readdirSync(directory, { withFileTypes: true })
+  const entries: ScoreCatalog['scores'] = readdirSync(directory, { withFileTypes: true })
     .filter((entry) => entry.isFile() && entry.name.endsWith('.json'))
     .map((entry) => entry.name)
     .sort()
     .map((file) => {
       const { title, composer }: Score = JSON.parse(readFileSync(join(directory, file), 'utf8'));
-      return { file, title, composer };
+      return { id: basename(file, '.json'), url: `./${file}`, title, composer };
     });
-  return JSON.stringify(entries, null, 2);
+  const catalog: ScoreCatalog = { version: 1, name: 'Examples', scores: entries };
+  return JSON.stringify(catalog, null, 2);
 }
 
 export function scoreCatalogPlugin(): Plugin {
@@ -42,7 +44,7 @@ export function scoreCatalogPlugin(): Plugin {
       this.environment.hot.send({
         type: 'custom',
         event: 'score-updated',
-        data: { file: basename(file) },
+        data: { scoreId: basename(file, '.json') },
       });
       return [];
     },

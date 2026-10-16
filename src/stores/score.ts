@@ -1,17 +1,19 @@
 import { computed, ref, watch } from 'vue';
 import { acceptHMRUpdate, defineStore } from 'pinia';
-import { scoreDuration, type Score, type ScoreEntry } from '../music.ts';
+import { scoreDuration, type Score } from '../music.ts';
 import { performedNotes } from '../ornaments';
-import { scoreBars, validateTempos } from '../timing';
+import { builtinSource, type ScoreRef } from '../library';
+import { scoreBars, validateScore } from '../timing';
 import { selectedIndices, selectionSpan, type MusicSelection } from '../selection.ts';
+import { useLibraryStore } from './library';
 
-type OpenedScore = { file: string } | { score: Score };
-const savedScoreVersion = 2;
+const savedScoreVersion = 3;
 
 export const useScoreStore = defineStore('score', () => {
+  const library = useLibraryStore();
   let saved: {
     version?: number;
-    opened?: OpenedScore | null;
+    opened?: ScoreRef | null;
     foldThreshold?: number;
     variableBarWidth?: boolean;
   } = {};
@@ -21,8 +23,7 @@ export const useScoreStore = defineStore('score', () => {
     // Unavailable storage or invalid saved JSON leaves the defaults in place.
   }
   const score = ref<Score | null>(null);
-  const opened = ref<OpenedScore | null>(null);
-  const catalog = ref<ScoreEntry[]>([]);
+  const opened = ref<ScoreRef | null>(null);
   const loading = ref(false);
   const error = ref('');
   const totalTicks = computed(() => (score.value ? scoreDuration(score.value) : 0));
@@ -81,14 +82,19 @@ export const useScoreStore = defineStore('score', () => {
     { flush: 'sync' },
   );
 
-  function load(next: Score, file?: string) {
-    if (!Number.isFinite(next.ppq) || next.ppq <= 0) throw new Error('PPQ must be positive.');
-    validateTempos(next.tempos);
-    scoreBars(scoreDuration(next), next.ppq, next.meters, next.sections, next.pickup);
+  function commit(next: Score, ref: ScoreRef | null) {
+    validateScore(next);
     performedNotes(next);
     selection.value = { kind: 'notes', indices: [] };
     score.value = next;
-    opened.value = file ? { file } : { score: next };
+    opened.value = ref;
+  }
+
+  function load(next: Score) {
+    commit(next, null);
+    request++;
+    loading.value = false;
+    error.value = '';
   }
 
   async function readScore(read: (current: () => boolean) => Promise<void>) {
@@ -107,75 +113,59 @@ export const useScoreStore = defineStore('score', () => {
     }
   }
 
-  function loadFile(file: File) {
+  function open(ref: ScoreRef) {
     return readScore(async (current) => {
-      if (!/\.json$/i.test(file.name) && file.type !== 'application/json') {
-        throw new Error('Choose a JSON score file.');
-      }
-      const next = JSON.parse(await file.text());
-      if (current()) load(next);
+      const next = await library.read(ref);
+      if (current()) commit(next, { ...ref });
     });
   }
 
-  async function readJSON<T>(file: string): Promise<T> {
-    const response = await fetch(`${import.meta.env.BASE_URL}scores/${file}`, {
-      cache: 'no-cache',
-    });
-    if (!response.ok) throw new Error(`Could not load score (${response.status}).`);
-    return response.json();
-  }
-
-  function loadHosted(file: string) {
+  function refreshBuiltin(scoreId: string) {
+    const ref = opened.value;
+    if (ref?.sourceId !== builtinSource.id || ref.scoreId !== scoreId) {
+      void library.refresh(builtinSource.id).catch(() => {});
+      return Promise.resolve(false);
+    }
     return readScore(async (current) => {
-      const next = await readJSON<Score>(file);
-      if (current()) load(next, file);
-    });
-  }
-
-  async function refreshHosted(file: string) {
-    if (!opened.value || !('file' in opened.value) || opened.value.file !== file) return false;
-    return readScore(async (current) => {
-      const next = await readJSON<Score>(file);
-      if (current() && opened.value && 'file' in opened.value && opened.value.file === file)
-        load(next, file);
+      await library.refresh(builtinSource.id);
+      const next = await library.read(ref);
+      if (current()) commit(next, ref);
     });
   }
 
   function initialize() {
+    if (score.value) return Promise.resolve(true);
     return readScore(async (current) => {
-      if (
-        !score.value &&
-        saved.version === savedScoreVersion &&
-        saved.opened &&
-        'score' in saved.opened
-      ) {
+      const ref = saved.version === savedScoreVersion ? saved.opened : null;
+      if (ref && library.sources.some((source) => source.id === ref.sourceId)) {
         try {
-          load(saved.opened.score);
+          const entries = await library.list(ref.sourceId);
+          if (!current()) return;
+          if (entries.some((entry) => entry.id === ref.scoreId)) {
+            const next = await library.read(ref);
+            if (current()) commit(next, ref);
+            return;
+          }
         } catch {
-          // A saved score that no longer loads falls back to the public catalog.
+          // An unavailable saved source falls back to the bundled examples.
+          if (!current()) return;
         }
       }
-      const entries = await readJSON<ScoreEntry[]>('index.json');
+      const entries = await library.list(builtinSource.id);
       if (!current()) return;
-      catalog.value = entries;
-      if (!score.value) {
-        const savedFile =
-          saved.version === savedScoreVersion && saved.opened && 'file' in saved.opened
-            ? saved.opened.file
-            : undefined;
-        const file = entries.find((entry) => entry.file === savedFile)?.file ?? entries[0]?.file;
-        if (file) {
-          const next = await readJSON<Score>(file);
-          if (current()) load(next, file);
-        }
+      const entry = entries[0];
+      if (entry) {
+        const ref = { sourceId: builtinSource.id, scoreId: entry.id };
+        const next = await library.read(ref);
+        if (current()) commit(next, ref);
       }
     });
   }
 
   return {
     score,
+    opened,
     notes,
-    catalog,
     loading,
     error,
     totalTicks,
@@ -187,13 +177,10 @@ export const useScoreStore = defineStore('score', () => {
     selectedNotes,
     span,
     load,
-    loadFile,
-    loadHosted,
-    refreshHosted,
+    open,
+    refreshBuiltin,
     initialize,
   };
 });
 
-if (import.meta.hot) {
-  import.meta.hot.accept(acceptHMRUpdate(useScoreStore, import.meta.hot));
-}
+if (import.meta.hot) import.meta.hot.accept(acceptHMRUpdate(useScoreStore, import.meta.hot));

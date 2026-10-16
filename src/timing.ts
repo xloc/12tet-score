@@ -1,4 +1,10 @@
-import { seconds, type Meter, type Section, type Tempo } from './music';
+import { scoreDuration, seconds, type Meter, type Score, type Section, type Tempo } from './music';
+
+export function validateScore(score: Score) {
+  if (!Number.isFinite(score.ppq) || score.ppq <= 0) throw new Error('PPQ must be positive.');
+  validateTempos(score.tempos);
+  scoreBars(scoreDuration(score), score.ppq, score.meters, score.sections, score.pickup);
+}
 
 export type BarTiming = {
   from: number;

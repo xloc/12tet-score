@@ -13,8 +13,8 @@ const midi = useMidiStore();
 const following = useFollowingStore();
 const notation = useTemplateRef<InstanceType<typeof MusicNotation>>('notation');
 
-function updateScore({ file }: { file: string }) {
-  void sheet.refreshHosted(file);
+function updateScore({ scoreId }: { scoreId: string }) {
+  void sheet.refreshBuiltin(scoreId);
 }
 
 onMounted(() => {

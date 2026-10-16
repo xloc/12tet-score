@@ -24,6 +24,7 @@ Follow established best practices when they make the code or project simpler. Ig
 - **TypeScript types at declaration site.** Define types at function signatures, API boundaries, and state initialization. Let TypeScript infer derived values.
 - **No aria** Don’t add aria attributes for simplicity
 - **Don't mutate Git state.** Don't modify commits or the staging area. Working-tree changes are allowed, including restoring files from git. `git stash` is allowed if restored afterwards. Ignore this rule when the user explicitly grants Git mutation access.
+- **README.md should be general** It shouldn't contain implementation details.
 
 See [design/00-code-style-examples.md](design/00-code-style-examples.md) for examples.
 
