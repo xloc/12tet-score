@@ -28,7 +28,7 @@ pnpm build
 
 ## Deployment
 
-Deploy with [Cloudflare Pages](https://developers.cloudflare.com/pages/framework-guides/deploy-a-vue-site/) using `pnpm build` as the build command and `dist` as the output directory. Set `PNPM_VERSION=11.21.0` for production and preview builds. The Node.js version is read from `.node-version`.
+Deploy through Cloudflare's **Create application** flow using [Workers Static Assets](https://developers.cloudflare.com/workers/static-assets/). Set the build command to `pnpm build`, the deploy command to `npx wrangler deploy`, and `PNPM_VERSION=11.21.0` for production and preview builds. The repository specifies the Node.js version and deployment output directory.
 
 ## Project references
 
